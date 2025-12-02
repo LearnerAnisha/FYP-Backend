@@ -33,6 +33,7 @@ INSTALLED_APPS = [
 
     # Custom apps
     'authentication',
+    'price_predictor',
 
     # Third-aprty
     'rest_framework',
