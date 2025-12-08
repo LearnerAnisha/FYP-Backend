@@ -1,20 +1,44 @@
 from django.db import models
+class MasterProduct(models.Model):
+    """
+    Stores each commodity exactly once.
+    This table always holds the latest known price snapshot.
+    If today's data is missing, min/max/avg become NULL 
+    but last_price keeps the previous known value.
+    """
+    commodityname = models.CharField(max_length=200, unique=True)
+    commodityunit = models.CharField(max_length=50, null=True, blank=True)
 
-class MarketPrice(models.Model):
+    insert_date = models.DateField(auto_now_add=True)
+    last_update = models.DateField(auto_now=True)
+
+    # Latest values (set to NULL if no data for today)
+    min_price = models.FloatField(null=True, blank=True)
+    max_price = models.FloatField(null=True, blank=True)
+    avg_price = models.FloatField(null=True, blank=True)
+
+    # Always stores last known price (never set to NULL)
+    last_price = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["commodityname"]
+
+    def __str__(self):
+        return self.commodityname
+class DailyPriceHistory(models.Model):
     """
-    Stores daily price data of fruits and vegetables fetched from the Kalimati Market API.
-    Historical data will be used later for machine learning predictions.
+    Stores daily snapshot records for price trend analysis.
+    A row exists only if the commodity appeared in that day's API.
     """
-    commodity_name = models.CharField(max_length=150)
-    commodity_unit = models.CharField(max_length=50, null=True, blank=True)
+    product = models.ForeignKey(MasterProduct, on_delete=models.CASCADE)
+    date = models.DateField()
+
     min_price = models.FloatField()
     max_price = models.FloatField()
     avg_price = models.FloatField()
-    date = models.DateField()  # API sends the date for each price list
-
     class Meta:
-        unique_together = ("commodity_name", "date")  # Avoid duplicate entries for same day/item
-        ordering = ["-date", "commodity_name"]  # Sort by latest date first
+        unique_together = ("product", "date")
+        ordering = ["-date"]
 
     def __str__(self):
-        return f"{self.commodity_name} ({self.date})"
+        return f"{self.product.commodityname} - {self.date}"

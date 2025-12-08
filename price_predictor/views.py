@@ -1,138 +1,165 @@
-from django.shortcuts import render
-
-# Create your views here.
 import requests
 from datetime import datetime
-from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.response import Response
 from rest_framework import status
-from .models import MarketPrice
-from rest_framework.generics import ListAPIView
-from .serializers import MarketPriceSerializer
-
+from .models import MasterProduct, DailyPriceHistory
+from .serializers import MasterProductSerializer, DailyPriceHistorySerializer
 class FetchMarketPriceAPIView(APIView):
     """
-    Fetches daily market price data from Kalimati External API and stores it in DB.
-    If records of the same item already exist for today's date, they are updated instead of duplicated.
+    Fetches latest market prices from Kalimati API and updates:
+
+    1. MasterProduct:
+        - If commodity appears today → update normally
+        - If commodity missing → set today's fields NULL, keep last_price unchanged
+    2. DailyPriceHistory:
+        - Insert only for commodities that appear in today’s API
     """
 
     def get(self, request):
-        external_api_url = "https://kalimatimarket.gov.np/api/daily-prices/en"
+        api_url = "https://kalimatimarket.gov.np/api/daily-prices/en"
 
         try:
-            # Send GET request to external API
-            response = requests.get(external_api_url)
-            response.raise_for_status()   # Raise error if API returns 4xx or 5xx
+            response = requests.get(api_url)
+            response.raise_for_status()
             data = response.json()
         except Exception as e:
-            return Response({"error": f"Failed to fetch data: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"API fetch failed: {str(e)}"},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        # Extract date from API response
         api_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
 
-        # Loop through all price items returned by API
+        # Track which items appear today
+        products_seen_today = set()
+
+        # -------------------------------
+        # 1️⃣ Process all items from API
+        # -------------------------------
         for item in data["prices"]:
-            MarketPrice.objects.update_or_create(
-                commodity_name=item["commodityname"],
-                date=api_date,  # Ensure one record per day per commodity
+            name = item["commodityname"]
+            unit = item.get("commodityunit", "")
+            min_p = float(item["minprice"])
+            max_p = float(item["maxprice"])
+            avg_p = float(item["avgprice"])
+
+            products_seen_today.add(name)
+
+            product, created = MasterProduct.objects.update_or_create(
+                commodityname=name,
                 defaults={
-                    "commodity_unit": item.get("commodityunit", ""),
-                    "min_price": float(item["minprice"]),
-                    "max_price": float(item["maxprice"]),
-                    "avg_price": float(item["avgprice"]),
+                    "commodityunit": unit,
+                    "min_price": min_p,
+                    "max_price": max_p,
+                    "avg_price": avg_p,
+                    "last_price": avg_p,   # always updated when new data exists
                 }
             )
 
-        return Response({"message": "Market prices fetched and stored successfully", "date": str(api_date)},
-                        status=status.HTTP_201_CREATED)
-    
-class MarketPriceListAPIView(ListAPIView):
-    """
-    Returns stored price data to frontend (React or mobile app).
-    """
-    queryset = MarketPrice.objects.all()
-    serializer_class = MarketPriceSerializer
+            DailyPriceHistory.objects.update_or_create(
+                product=product,
+                date=api_date,
+                defaults={
+                    "min_price": min_p,
+                    "max_price": max_p,
+                    "avg_price": avg_p,
+                }
+            )
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.db.models import Avg
-from .models import MarketPrice
-from rest_framework import status
+        # ----------------------------------------------------
+        # 2️⃣ For items missing today → set today's fields NULL
+        # ----------------------------------------------------
+        all_products = MasterProduct.objects.all()
 
+        for product in all_products:
+            if product.commodityname not in products_seen_today:
+                product.min_price = None
+                product.max_price = None
+                product.avg_price = None
+                # last_price remains unchanged (previous known price)
+                product.save(update_fields=["min_price", "max_price", "avg_price"])
+
+        return Response(
+            {"message": "Market prices updated (missing items set to NULL)", "date": str(api_date)},
+            status=status.HTTP_201_CREATED
+        )
+class LatestPricesAPIView(APIView):
+    """Returns the latest available prices from MasterProduct."""
+
+    def get(self, request):
+        data = MasterProduct.objects.all().order_by("commodityname")
+        serializer = MasterProductSerializer(data, many=True)
+        return Response(serializer.data)
+class DailyPriceHistoryAPIView(APIView):
+    """Returns complete historical data."""
+
+    def get(self, request):
+        data = DailyPriceHistory.objects.all()
+        serializer = DailyPriceHistorySerializer(data, many=True)
+        return Response(serializer.data)
 class MarketPriceAnalysisAPIView(APIView):
     """
-    Returns:
-    - today's date
-    - previous available date
-    - price change (%) per commodity
-    - overall market trend
+    Compares today's vs yesterday’s average price for all commodities.
+    Missing data does NOT affect historical analysis.
     """
 
     def get(self, request):
-        qs = MarketPrice.objects.all()
-
-        if not qs.exists():
-            return Response({"error": "No data available"}, status=404)
-
-        # Get distinct dates sorted (oldest first)
-        dates = list(qs.values_list("date", flat=True).distinct().order_by("date"))
+        dates = list(
+            DailyPriceHistory.objects.values_list("date", flat=True)
+            .distinct()
+            .order_by("date")
+        )
 
         if len(dates) < 2:
-            return Response({"error": "Need at least 2 days of data to compute trends"}, status=400)
+            return Response({"error": "Not enough historical data"}, status=400)
 
-        prev_date = dates[-2]   # second latest
-        today_date = dates[-1]  # latest
+        yesterday = dates[-2]
+        today = dates[-1]
 
-        today_items = qs.filter(date=today_date)
-        prev_items = qs.filter(date=prev_date)
+        today_rows = DailyPriceHistory.objects.filter(date=today)
+        yesterday_rows = DailyPriceHistory.objects.filter(date=yesterday)
 
-        # Build a dict for previous day prices
-        prev_price_map = {
-            item.commodity_name: item.avg_price
-            for item in prev_items
-        }
+        # Fast lookup map
+        yesterday_map = {row.product.id: row.avg_price for row in yesterday_rows}
 
-        commodity_changes = []
-        ups = 0
-        downs = 0
+        results = []
+        ups = downs = 0
 
-        for item in today_items:
-            name = item.commodity_name
-            today_price = item.avg_price
-            prev_price = prev_price_map.get(name)
+        for row in today_rows:
+            pid = row.product.id
+            today_avg = row.avg_price
+            y_avg = yesterday_map.get(pid)
 
-            if prev_price:
-                change_pct = ((today_price - prev_price) / prev_price) * 100
-                trend = "up" if change_pct > 0 else "down" if change_pct < 0 else "same"
-
-                if change_pct > 0:
-                    ups += 1
-                elif change_pct < 0:
-                    downs += 1
+            if y_avg:
+                change_pct = ((today_avg - y_avg) / y_avg) * 100
             else:
                 change_pct = 0
-                trend = "unknown"
 
-            commodity_changes.append({
-                "commodity": name,
-                "today": today_price,
-                "yesterday": prev_price,
+            trend = (
+                "up" if change_pct > 0 else
+                "down" if change_pct < 0 else
+                "same"
+            )
+
+            if trend == "up": ups += 1
+            if trend == "down": downs += 1
+
+            results.append({
+                "commodity": row.product.commodityname,
+                "today": today_avg,
+                "yesterday": y_avg,
                 "change_percentage": round(change_pct, 2),
-                "trend": trend
+                "trend": trend,
             })
 
-        # Determine global trend
-        if ups > downs:
-            market_trend = "Bullish"
-        elif downs > ups:
-            market_trend = "Bearish"
-        else:
-            market_trend = "Neutral"
+        market_trend = (
+            "Bullish" if ups > downs else
+            "Bearish" if downs > ups else
+            "Neutral"
+        )
 
         return Response({
-            "today": str(today_date),
-            "yesterday": str(prev_date),
+            "today": str(today),
+            "yesterday": str(yesterday),
             "market_trend": market_trend,
-            "commodity_changes": commodity_changes
+            "changes": results
         })
-
