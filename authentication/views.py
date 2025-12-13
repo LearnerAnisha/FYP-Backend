@@ -11,6 +11,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, EmailOTP, generate_otp
 from .serializers import RegisterSerializer, LoginSerializer
@@ -25,7 +26,20 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
 
-    def perform_create(self, serializer):
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+
+        try:
+            serializer.is_valid(raise_exception=True)
+        except ValidationError as e:
+            return Response(
+                {
+                    "status": "error",
+                    "errors": e.detail
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         user = serializer.save(is_verified=False)
 
         otp_code = generate_otp()
@@ -36,10 +50,11 @@ class RegisterView(generics.CreateAPIView):
 
         send_otp_email(user, otp_code)
 
-    def create(self, request, *args, **kwargs):
-        super().create(request, *args, **kwargs)
         return Response(
-            {"message": "Registration successful. OTP sent to your email."},
+            {
+                "status": "success",
+                "message": "Registration successful. OTP sent to your email."
+            },
             status=status.HTTP_201_CREATED
         )
 
@@ -59,20 +74,20 @@ class VerifyOTPView(APIView):
             otp_obj = EmailOTP.objects.get(user=user)
         except (User.DoesNotExist, EmailOTP.DoesNotExist):
             return Response(
-                {"message": "Invalid email or OTP"},
+                {"message": "Invalid email or OTP."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         if otp_obj.is_expired():
             otp_obj.delete()
             return Response(
-                {"message": "OTP has expired"},
+                {"message": "OTP has expired."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         if otp_obj.code != otp_input:
             return Response(
-                {"message": "Incorrect OTP"},
+                {"message": "Incorrect OTP."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -81,7 +96,7 @@ class VerifyOTPView(APIView):
         otp_obj.delete()
 
         return Response(
-            {"message": "Email verified successfully"},
+            {"message": "Email verified successfully."},
             status=status.HTTP_200_OK
         )
 
@@ -101,19 +116,22 @@ class LoginView(generics.GenericAPIView):
 
         if not user.is_verified:
             return Response(
-                {"message": "Email verification required"},
+                {"message": "Email verification required."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
         refresh = RefreshToken.for_user(user)
 
-        return Response({
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-            "user": {
-                "id": user.id,
-                "full_name": user.full_name,
-                "email": user.email,
-                "phone": user.phone
-            }
-        })
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": {
+                    "id": user.id,
+                    "full_name": user.full_name,
+                    "email": user.email,
+                    "phone": user.phone
+                }
+            },
+            status=status.HTTP_200_OK
+        )
