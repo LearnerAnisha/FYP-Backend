@@ -13,7 +13,7 @@ class FetchMarketPriceAPIView(APIView):
         - If commodity appears today → update normally
         - If commodity missing → set today's fields NULL, keep last_price unchanged
     2. DailyPriceHistory:
-        - Insert only for commodities that appear in today’s API
+        - Insert only for commodities that appear in todays API
     """
 
     def get(self, request):
@@ -32,9 +32,7 @@ class FetchMarketPriceAPIView(APIView):
         # Track which items appear today
         products_seen_today = set()
 
-        # -------------------------------
-        # 1️⃣ Process all items from API
-        # -------------------------------
+        # Process all items from API
         for item in data["prices"]:
             name = item["commodityname"]
             unit = item.get("commodityunit", "")
@@ -65,9 +63,7 @@ class FetchMarketPriceAPIView(APIView):
                 }
             )
 
-        # ----------------------------------------------------
-        # 2️⃣ For items missing today → set today's fields NULL
-        # ----------------------------------------------------
+        #For items missing today → set today's fields NULL
         all_products = MasterProduct.objects.all()
 
         for product in all_products:

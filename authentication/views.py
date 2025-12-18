@@ -14,8 +14,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, EmailOTP, generate_otp
-from .serializers import RegisterSerializer, LoginSerializer
+from .serializers import ProfileSerializer, RegisterSerializer, LoginSerializer
 from .email import send_otp_email
+from django.contrib.auth.password_validation import validate_password
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.generics import RetrieveUpdateAPIView
 
 class RegisterView(generics.CreateAPIView):
     """
@@ -134,4 +137,78 @@ class LoginView(generics.GenericAPIView):
                 }
             },
             status=status.HTTP_200_OK
+        )
+class ProfileView(RetrieveUpdateAPIView):
+    """
+    API endpoint for retrieving and updating
+    the currently authenticated user's profile.
+
+    HTTP Methods:
+    - GET  : Retrieve profile data
+    - PUT  : Update profile data
+
+    Security:
+    - Requires valid JWT token
+    - Users can only access their own profile
+    """
+
+    serializer_class = ProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        """
+        Returns the currently authenticated user.
+
+        DRF automatically sets request.user
+        when a valid JWT token is provided.
+        """
+        return self.request.user
+class ChangePasswordView(APIView):
+    """
+    API endpoint for changing user password.
+
+    Workflow:
+    1. Verify current password
+    2. Validate new password against Django's password policies
+    3. Save the new password securely
+
+    Security:
+    - JWT authentication required
+    - Old password must be correct
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Handles password change request.
+        """
+
+        user = request.user
+        current_password = request.data.get("current")
+        new_password = request.data.get("new")
+
+        # Step 1: Validate current password
+        if not user.check_password(current_password):
+            return Response(
+                {"message": "Current password is incorrect."},
+                status=400
+            )
+
+        # Step 2: Validate new password strength
+        try:
+            validate_password(new_password, user)
+        except Exception as e:
+            return Response(
+                {"errors": e.messages},
+                status=400
+            )
+
+        # Step 3: Set and save new password
+        user.set_password(new_password)
+        user.save()
+
+        return Response(
+            {"message": "Password updated successfully."},
+            status=200
         )

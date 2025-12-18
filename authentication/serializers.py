@@ -130,3 +130,17 @@ class LoginSerializer(serializers.Serializer):
 
         data["user"] = user
         return data
+class ProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer for retrieving and updating user profile data.
+    """
+    class Meta:
+        model = User
+        # Fields that will be exposed to frontend
+        fields = [
+            "full_name",
+            "email",
+            "phone",
+        ]
+        # Email should never be editable once registered
+        read_only_fields = ["email"]
