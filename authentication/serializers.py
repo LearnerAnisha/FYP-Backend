@@ -8,6 +8,7 @@ with strong input validation and clear error messages.
 import re
 from rest_framework import serializers
 from .models import User
+from django.utils.timezone import now
 
 class RegisterSerializer(serializers.ModelSerializer):
     """
@@ -134,6 +135,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     """
     Serializer for retrieving and updating user profile data.
     """
+    active_days = serializers.SerializerMethodField() 
     class Meta:
         model = User
         # Fields that will be exposed to frontend
@@ -141,6 +143,21 @@ class ProfileSerializer(serializers.ModelSerializer):
             "full_name",
             "email",
             "phone",
+            "avatar",
+            "date_joined",
+            "active_days",
         ]
         # Email should never be editable once registered
-        read_only_fields = ["email"]
+        read_only_fields = ["email", "date_joined"]
+
+    def get_active_days(self, obj):
+        return (now().date() - obj.date_joined.date()).days + 1
+    
+    def validate_avatar(self, value):
+        if value.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError("Image size must be under 2MB.")
+
+        if not value.content_type.startswith("image/"):
+            raise serializers.ValidationError("Only image files are allowed.")
+
+        return value

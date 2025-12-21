@@ -47,9 +47,17 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = "authentication.User"
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+    "DEFAULT_PARSER_CLASSES": (
+        "rest_framework.parsers.JSONParser",
+        "rest_framework.parsers.FormParser",
+        "rest_framework.parsers.MultiPartParser",
+    ),
 }
 
 MIDDLEWARE = [
@@ -170,3 +178,7 @@ CORS_ALLOW_METHODS = ['*']
 # settings for azure
 AZURE_EMAIL_CONNECTION_STRING = os.getenv("AZURE_EMAIL_CONNECTION_STRING")
 AZURE_SENDER_EMAIL = os.getenv("AZURE_SENDER_EMAIL")
+
+# Media
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
