@@ -3,8 +3,10 @@ from datetime import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from krishiSathi.krishiSathi import settings
 from .models import MasterProduct, DailyPriceHistory
 from .serializers import MasterProductSerializer, DailyPriceHistorySerializer
+from rest_framework.permissions import AllowAny
 class FetchMarketPriceAPIView(APIView):
     """
     Fetches latest market prices from Kalimati API and updates:
@@ -16,7 +18,17 @@ class FetchMarketPriceAPIView(APIView):
         - Insert only for commodities that appear in todays API
     """
 
+    permission_classes = [AllowAny]
+
     def get(self, request):
+        token = request.headers.get("X-CRON-TOKEN")
+
+        if token != settings.CRON_SECRET_KEY:
+            return Response(
+                {"error": "Unauthorized"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
         api_url = "https://kalimatimarket.gov.np/api/daily-prices/en"
 
         try:
@@ -81,12 +93,16 @@ class FetchMarketPriceAPIView(APIView):
 class LatestPricesAPIView(APIView):
     """Returns the latest available prices from MasterProduct."""
 
+    permission_classes = [AllowAny]
+
     def get(self, request):
         data = MasterProduct.objects.all().order_by("commodityname")
         serializer = MasterProductSerializer(data, many=True)
         return Response(serializer.data)
 class DailyPriceHistoryAPIView(APIView):
     """Returns complete historical data."""
+
+    permission_classes = [AllowAny]
 
     def get(self, request):
         data = DailyPriceHistory.objects.all()
@@ -98,6 +114,8 @@ class MarketPriceAnalysisAPIView(APIView):
     Missing data does NOT affect historical analysis.
     """
 
+    permission_classes = [AllowAny]
+    
     def get(self, request):
         dates = list(
             DailyPriceHistory.objects.values_list("date", flat=True)

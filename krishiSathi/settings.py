@@ -182,3 +182,6 @@ AZURE_SENDER_EMAIL = os.getenv("AZURE_SENDER_EMAIL")
 # Media
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# secret key
+CRON_SECRET_KEY = "kalimati-fetch-2025"
