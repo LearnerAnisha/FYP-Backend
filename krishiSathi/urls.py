@@ -39,6 +39,7 @@ urlpatterns = [
    path('admin/', admin.site.urls),
    path("api/auth/", include("authentication.urls")),
    path("api/market/", include("price_predictor.urls")),
+   path("api/weather/", include("weather.urls")),
 ]
 
 if settings.DEBUG:

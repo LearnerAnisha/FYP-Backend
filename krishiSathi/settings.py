@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     # Custom apps
     'authentication',
     'price_predictor',
+    'weather',
 
     # Third-aprty
     'rest_framework',
@@ -183,5 +184,5 @@ AZURE_SENDER_EMAIL = os.getenv("AZURE_SENDER_EMAIL")
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# secret key
-CRON_SECRET_KEY = "kalimati-fetch-2025"
+# weather api key
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")

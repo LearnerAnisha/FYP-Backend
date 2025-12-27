@@ -3,7 +3,7 @@ from datetime import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from krishiSathi.krishiSathi import settings
+from krishiSathi import settings
 from .models import MasterProduct, DailyPriceHistory
 from .serializers import MasterProductSerializer, DailyPriceHistorySerializer
 from rest_framework.permissions import AllowAny
@@ -21,13 +21,6 @@ class FetchMarketPriceAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        token = request.headers.get("X-CRON-TOKEN")
-
-        if token != settings.CRON_SECRET_KEY:
-            return Response(
-                {"error": "Unauthorized"},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
         
         api_url = "https://kalimatimarket.gov.np/api/daily-prices/en"
 
