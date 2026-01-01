@@ -91,6 +91,24 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
+class FarmerProfile(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="farmer_profile"
+    )
+
+    farm_size = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True
+    )
+    experience = models.PositiveIntegerField(null=True, blank=True)
+    crop_types = models.CharField(max_length=255, blank=True)
+    language = models.CharField(max_length=20, default="nepali")
+    bio = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"FarmerProfile of {self.user.email}"
+
 class EmailOTP(models.Model):
     """
     Model to store email-based One-Time Passwords (OTP).

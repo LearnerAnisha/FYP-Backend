@@ -7,7 +7,7 @@ with strong input validation and clear error messages.
 
 import re
 from rest_framework import serializers
-from .models import User
+from .models import FarmerProfile, User
 from django.utils.timezone import now
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -131,14 +131,23 @@ class LoginSerializer(serializers.Serializer):
 
         data["user"] = user
         return data
+    
+class FarmerProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FarmerProfile
+        fields = [
+            "farm_size",
+            "experience",
+            "crop_types",
+            "language",
+            "bio",
+        ]
 class ProfileSerializer(serializers.ModelSerializer):
-    """
-    Serializer for retrieving and updating user profile data.
-    """
-    active_days = serializers.SerializerMethodField() 
+    active_days = serializers.SerializerMethodField()
+    farmer_profile = FarmerProfileSerializer(required=False)
+
     class Meta:
         model = User
-        # Fields that will be exposed to frontend
         fields = [
             "full_name",
             "email",
@@ -146,18 +155,26 @@ class ProfileSerializer(serializers.ModelSerializer):
             "avatar",
             "date_joined",
             "active_days",
+            "farmer_profile",
         ]
-        # Email should never be editable once registered
         read_only_fields = ["email", "date_joined"]
 
     def get_active_days(self, obj):
         return (now().date() - obj.date_joined.date()).days + 1
-    
-    def validate_avatar(self, value):
-        if value.size > 2 * 1024 * 1024:
-            raise serializers.ValidationError("Image size must be under 2MB.")
 
-        if not value.content_type.startswith("image/"):
-            raise serializers.ValidationError("Only image files are allowed.")
+    def update(self, instance, validated_data):
+        farmer_data = validated_data.pop("farmer_profile", None)
 
-        return value
+        # Update User fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update or create FarmerProfile
+        if farmer_data:
+            profile, _ = FarmerProfile.objects.get_or_create(user=instance)
+            for attr, value in farmer_data.items():
+                setattr(profile, attr, value)
+            profile.save()
+
+        return instance

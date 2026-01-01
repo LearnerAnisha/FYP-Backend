@@ -7,27 +7,22 @@ from weather.weather_services import (
     build_weather_response,
     WeatherServiceError,
 )
-
-
 class CurrentWeatherAPIView(APIView):
     """
-    GET /api/weather/current/?city=Kathmandu
+    GET /api/weather/current/?lat=27.7&lon=85.3
     """
+
     permission_classes = [AllowAny]
 
     def get(self, request):
-        city = request.GET.get("city")
         lat = request.GET.get("lat")
         lon = request.GET.get("lon")
 
-        data = build_weather_response(
-           city=city,
-           lat=lat,
-           lon=lon
-        )
-
         try:
-            data = build_weather_response(city)
+            data = build_weather_response(
+                lat=lat,
+                lon=lon
+            )
             return Response(data, status=status.HTTP_200_OK)
 
         except WeatherServiceError as error:
