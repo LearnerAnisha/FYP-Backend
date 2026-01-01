@@ -6,7 +6,12 @@ from rest_framework import status
 from krishiSathi import settings
 from .models import MasterProduct, DailyPriceHistory
 from .serializers import MasterProductSerializer, DailyPriceHistorySerializer
+from .filters import MasterProductFilter
 from rest_framework.permissions import AllowAny
+from rest_framework.generics import ListAPIView
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+
 class FetchMarketPriceAPIView(APIView):
     """
     Fetches latest market prices from Kalimati API and updates:
@@ -83,15 +88,42 @@ class FetchMarketPriceAPIView(APIView):
             {"message": "Market prices updated (missing items set to NULL)", "date": str(api_date)},
             status=status.HTTP_201_CREATED
         )
-class LatestPricesAPIView(APIView):
-    """Returns the latest available prices from MasterProduct."""
 
+class LatestPricesAPIView(ListAPIView):
+    """
+    Latest market prices with:
+    - search by commodity name
+    - filter by price range
+    - sort ascending / descending
+    """
+
+    queryset = MasterProduct.objects.all()
+    serializer_class = MasterProductSerializer
     permission_classes = [AllowAny]
 
-    def get(self, request):
-        data = MasterProduct.objects.all().order_by("commodityname")
-        serializer = MasterProductSerializer(data, many=True)
-        return Response(serializer.data)
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
+
+    # 🔍 Search
+    search_fields = ["commodityname"]
+
+    # 🎚 Filter (from filters.py)
+    filterset_class = MasterProductFilter
+
+    # ↕ Sorting
+    ordering_fields = [
+        "commodityname",
+        "min_price",
+        "max_price",
+        "avg_price",
+        "last_price",
+    ]
+
+    ordering = ["commodityname"]  # default
+
 class DailyPriceHistoryAPIView(APIView):
     """Returns complete historical data."""
 
