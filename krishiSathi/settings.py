@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'authentication',
     'price_predictor',
     'weather',
+    'CropDiseaseDetection',
 
     # Third-aprty
     'rest_framework',
