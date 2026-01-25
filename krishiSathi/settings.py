@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'price_predictor',
     'weather',
     'CropDiseaseDetection',
+    'admin_panel',
 
     # Third-aprty
     'rest_framework',

@@ -41,6 +41,7 @@ urlpatterns = [
    path("api/market/", include("price_predictor.urls")),
    path("api/weather/", include("weather.urls")),
    path("api/disease/", include("CropDiseaseDetection.urls")),
+   path("api/admin/", include("admin_panel.urls")),
 ]
 
 if settings.DEBUG:
