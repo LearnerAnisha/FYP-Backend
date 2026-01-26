@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from decouple import config
 import os
 from dotenv import load_dotenv
 from datetime import timedelta
@@ -23,9 +24,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
+SECRET_KEY = config('SECRET_KEY')
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 # Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -40,6 +42,7 @@ INSTALLED_APPS = [
     'weather',
     'CropDiseaseDetection',
     'admin_panel',
+    'chatbot',
 
     # Third-aprty
     'rest_framework',
@@ -99,7 +102,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'krishiSathi.wsgi.application'
-
 
 DATABASES = {
     "default": {
@@ -193,7 +195,9 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # weather api key
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+
+GEMINI_API_KEY = config('GEMINI_API_KEY')
 
 # jwt
 SIMPLE_JWT = {
