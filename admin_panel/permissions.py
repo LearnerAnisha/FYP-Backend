@@ -1,9 +1,3 @@
-"""
-admin_panel/permissions.py
---------------------------
-Custom permissions for admin panel.
-"""
-
 from rest_framework import permissions
 
 class IsAdminUser(permissions.BasePermission):

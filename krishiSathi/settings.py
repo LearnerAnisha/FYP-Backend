@@ -196,7 +196,12 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # weather api key
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
+DEFAULT_CITY = config('DEFAULT_CITY', default='Kathmandu')
 
+# Cache timeout in seconds (5 minutes)
+WEATHER_CACHE_TIMEOUT = 300
+
+# gemini api key
 GEMINI_API_KEY = config('GEMINI_API_KEY')
 
 # jwt

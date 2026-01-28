@@ -6,30 +6,55 @@ URL configuration for admin panel.
 
 from django.urls import path
 from .views import (
+    # Authentication & Dashboard
     AdminLoginView,
     AdminDashboardStatsView,
+    
+    # User Management
     AdminUserListView,
     AdminUserDetailView,
     AdminToggleUserStatusView,
     AdminVerifyUserView,
+    
+    # Activity Logs
     AdminActivityLogListView,
+    
+    # Chatbot
+    ChatConversationListView,
+    ChatConversationDetailView,
+    ChatMessageListView,
+    CropSuggestionListView,
+    WeatherDataListView,
+    
+    # Crop Disease Detection
+    ScanResultListView,
+    ScanResultDetailView,
 )
 
 app_name = 'admin_panel'
 
 urlpatterns = [
-    # Authentication
+    # ========== AUTHENTICATION & DASHBOARD ==========
     path('login/', AdminLoginView.as_view(), name='admin-login'),
-    
-    # Dashboard
     path('dashboard/stats/', AdminDashboardStatsView.as_view(), name='dashboard-stats'),
     
-    # User Management
+    # ========== USER MANAGEMENT ==========
     path('users/', AdminUserListView.as_view(), name='users-list'),
     path('users/<int:id>/', AdminUserDetailView.as_view(), name='user-detail'),
     path('users/<int:id>/toggle-status/', AdminToggleUserStatusView.as_view(), name='toggle-status'),
     path('users/<int:id>/verify/', AdminVerifyUserView.as_view(), name='verify-user'),
     
-    # Activity Logs
+    # ========== ACTIVITY LOGS ==========
     path('activity-logs/', AdminActivityLogListView.as_view(), name='activity-logs'),
+    
+    # ========== CHATBOT ==========
+    path('chat-conversations/', ChatConversationListView.as_view(), name='chat-conversations'),
+    path('chat-conversations/<int:pk>/', ChatConversationDetailView.as_view(), name='chat-conversation-detail'),
+    path('chat-messages/', ChatMessageListView.as_view(), name='chat-messages'),
+    path('crop-suggestions/', CropSuggestionListView.as_view(), name='crop-suggestions'),
+    path('weather-data/', WeatherDataListView.as_view(), name='weather-data'),
+    
+    # ========== CROP DISEASE DETECTION ==========
+    path('scan-results/', ScanResultListView.as_view(), name='scan-results'),
+    path('scan-results/<int:pk>/', ScanResultDetailView.as_view(), name='scan-result-detail'),
 ]

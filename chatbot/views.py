@@ -1,6 +1,3 @@
-# chatbot/views.py
-# =================
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -21,7 +18,6 @@ from .gemini_service import GeminiService
 
 
 class WeatherView(APIView):
-    permission_classes = [AllowAny]
     """
     GET endpoint to fetch weather data
     Usage: GET /api/weather/?location=Kathmandu
@@ -55,7 +51,6 @@ class WeatherView(APIView):
 
 
 class CropSuggestionView(APIView):
-    permission_classes = [AllowAny]
     """
     POST endpoint to get AI-generated crop suggestions
     This is your main feature!
@@ -94,10 +89,11 @@ class CropSuggestionView(APIView):
             )
             
             # Step 3: Get or create conversation
-            conversation, _ = ChatConversation.objects.get_or_create(
-                session_id=session_id
-            )
-            
+            conversation, created = ChatConversation.objects.get_or_create(
+            session_id=session_id,
+            user = request.user
+           )
+
             # Step 4: Save to database
             crop_suggestion = CropSuggestion.objects.create(
                 conversation=conversation,
@@ -126,7 +122,6 @@ class CropSuggestionView(APIView):
 
 
 class ChatView(APIView):
-    permission_classes = [AllowAny]
     """
     POST endpoint for general chatbot conversation
     
@@ -148,9 +143,10 @@ class ChatView(APIView):
         
         try:
             # Get or create conversation
-            conversation, _ = ChatConversation.objects.get_or_create(
-                session_id=session_id
-            )
+            conversation, created = ChatConversation.objects.get_or_create(
+                session_id=session_id,
+                user = request.user
+            )          
             
             # Save user message
             ChatMessage.objects.create(

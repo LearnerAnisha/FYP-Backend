@@ -1,7 +1,7 @@
 """
 admin_panel/models.py
 ---------------------
-Models for admin activity logging.
+Models for admin activity logging and management.
 """
 
 from django.db import models
@@ -17,8 +17,10 @@ class AdminActivityLog(models.Model):
         ('delete', 'Delete'),
         ('activate', 'Activate'),
         ('deactivate', 'Deactivate'),
+        ('verify', 'Verify'),
         ('login', 'Login'),
         ('logout', 'Logout'),
+        ('view', 'View'),
     ]
     
     admin_user = models.ForeignKey(
@@ -38,9 +40,16 @@ class AdminActivityLog(models.Model):
     description = models.TextField()
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
+    metadata = models.JSONField(null=True, blank=True)  # Store additional context
     
     class Meta:
         ordering = ['-timestamp']
+        db_table = 'admin_activity_logs'
+        indexes = [
+            models.Index(fields=['-timestamp']),
+            models.Index(fields=['admin_user', '-timestamp']),
+            models.Index(fields=['action', '-timestamp']),
+        ]
     
     def __str__(self):
         return f"{self.admin_user} - {self.action} - {self.timestamp}"

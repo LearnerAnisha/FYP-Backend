@@ -1,26 +1,35 @@
 """
 admin_panel/views.py
 --------------------
-API views for admin panel operations.
+API views for admin panel operations with your existing models.
 """
 
-from rest_framework import generics, status
+from rest_framework import generics, status, filters
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.utils import timezone
 from datetime import timedelta
 
 from authentication.models import User, FarmerProfile
 from authentication.serializers import LoginSerializer
+from chatbot.models import ChatConversation, ChatMessage, WeatherData, CropSuggestion
+from CropDiseaseDetection.models import ScanResult
 from .models import AdminActivityLog
 from .serializers import (
     AdminUserListSerializer,
     AdminUserDetailSerializer,
     AdminActivityLogSerializer,
+    ChatConversationListSerializer,
+    ChatConversationDetailSerializer,
+    ChatMessageSerializer,
+    CropSuggestionSerializer,
+    WeatherDataSerializer,
+    ScanResultListSerializer,
+    ScanResultDetailSerializer,
 )
 from .permissions import IsAdminUser
 from .utils import log_admin_action
@@ -29,6 +38,8 @@ class AdminPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
+
+# ========== AUTHENTICATION ==========
 
 class AdminLoginView(generics.GenericAPIView):
     """
@@ -81,6 +92,8 @@ class AdminLoginView(generics.GenericAPIView):
             status=status.HTTP_200_OK
         )
 
+# ========== DASHBOARD ==========
+
 class AdminDashboardStatsView(APIView):
     """
     Get dashboard statistics.
@@ -106,6 +119,13 @@ class AdminDashboardStatsView(APIView):
         # Farmer statistics
         total_farmers = FarmerProfile.objects.count()
         
+        # Chatbot statistics
+        total_conversations = ChatConversation.objects.count()
+        total_messages = ChatMessage.objects.count()
+        
+        # Disease scan statistics
+        total_scans = ScanResult.objects.count()
+        
         return Response({
             "overview": {
                 "total_users": total_users,
@@ -121,7 +141,16 @@ class AdminDashboardStatsView(APIView):
                 "this_week": users_this_week,
                 "this_month": users_this_month,
             },
+            "chatbot": {
+                "total_conversations": total_conversations,
+                "total_messages": total_messages,
+            },
+            "disease_detection": {
+                "total_scans": total_scans,
+            }
         })
+
+# ========== USER MANAGEMENT ==========
 
 class AdminUserListView(generics.ListAPIView):
     """
@@ -258,7 +287,7 @@ class AdminVerifyUserView(APIView):
         
         log_admin_action(
             admin_user=request.user,
-            action='update',
+            action='verify',
             description=f"Manually verified user {user.email}",
             target_user=user,
             request=request
@@ -268,6 +297,126 @@ class AdminVerifyUserView(APIView):
             "message": "User verified successfully.",
             "is_verified": user.is_verified
         })
+
+# ========== CHATBOT MANAGEMENT ==========
+
+class ChatConversationListView(generics.ListAPIView):
+    serializer_class = ChatConversationListSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = AdminPagination
+    
+    def get_queryset(self):
+        queryset = ChatConversation.objects.all().select_related('user').prefetch_related('messages')
+        
+        # Search by session_id or user email
+        search = self.request.query_params.get('search', None)
+        if search:
+            queryset = queryset.filter(
+                Q(session_id__icontains=search) |
+                Q(user__email__icontains=search) |
+                Q(user__full_name__icontains=search)
+            )
+        
+        return queryset.order_by('-updated_at')
+
+class ChatConversationDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = ChatConversation.objects.all()
+    serializer_class = ChatConversationDetailSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def perform_destroy(self, instance):
+        log_admin_action(
+            admin_user=self.request.user,
+            action='delete',
+            description=f"Deleted conversation {instance.session_id}",
+            target_user=instance.user,
+            request=self.request
+        )
+        instance.delete()
+
+class ChatMessageListView(generics.ListAPIView):
+    serializer_class = ChatMessageSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = AdminPagination
+    
+    def get_queryset(self):
+        queryset = ChatMessage.objects.all().select_related('conversation')
+        
+        conversation_id = self.request.query_params.get('conversation_id')
+        if conversation_id:
+            queryset = queryset.filter(conversation_id=conversation_id)
+        
+        role = self.request.query_params.get('role')
+        if role:
+            queryset = queryset.filter(role=role)
+        
+        return queryset.order_by('-timestamp')
+
+class CropSuggestionListView(generics.ListAPIView):
+    serializer_class = CropSuggestionSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = AdminPagination
+    
+    def get_queryset(self):
+        queryset = CropSuggestion.objects.all().select_related('conversation', 'conversation__user')
+        
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(crop_name__icontains=search) |
+                Q(growth_stage__icontains=search)
+            )
+        
+        return queryset.order_by('-created_at')
+
+class WeatherDataListView(generics.ListAPIView):
+    serializer_class = WeatherDataSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = AdminPagination
+    
+    def get_queryset(self):
+        queryset = WeatherData.objects.all()
+        
+        location = self.request.query_params.get('location')
+        if location:
+            queryset = queryset.filter(location__icontains=location)
+        
+        return queryset.order_by('-fetched_at')
+
+# ========== CROP DISEASE DETECTION ==========
+
+class ScanResultListView(generics.ListAPIView):
+    serializer_class = ScanResultListSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = AdminPagination
+    
+    def get_queryset(self):
+        queryset = ScanResult.objects.all()
+        
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(crop_type__icontains=search) |
+                Q(disease__icontains=search)
+            )
+        
+        severity = self.request.query_params.get('severity')
+        if severity:
+            queryset = queryset.filter(severity=severity)
+        
+        return queryset.order_by('-created_at')
+
+class ScanResultDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = ScanResult.objects.all()
+    serializer_class = ScanResultDetailSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+# ========== ACTIVITY LOGS ==========
 
 class AdminActivityLogListView(generics.ListAPIView):
     """
@@ -283,13 +432,18 @@ class AdminActivityLogListView(generics.ListAPIView):
         )
         
         # Filter by admin user
-        admin_id = self.request.query_params.get('admin_id', None)
+        admin_id = self.request.query_params.get('admin_id')
         if admin_id:
             queryset = queryset.filter(admin_user_id=admin_id)
         
         # Filter by action type
-        action = self.request.query_params.get('action', None)
+        action = self.request.query_params.get('action')
         if action:
             queryset = queryset.filter(action=action)
+        
+        # Search in description
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(description__icontains=search)
         
         return queryset.order_by('-timestamp')
