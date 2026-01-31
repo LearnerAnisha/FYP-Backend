@@ -1,44 +1,19 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
 from rest_framework import status
+from rest_framework.permissions import AllowAny
+from .serializers import WeatherRequestSerializer
+from .weather_services import fetch_weather_and_forecast
 
-from weather.weather_services import (
-    build_weather_response,
-    WeatherServiceError,
-)
-class CurrentWeatherAPIView(APIView):
-    """
-    GET /api/weather/current/?lat=27.7&lon=85.3
-    """
-
+class WeatherForecastView(APIView):
     permission_classes = [AllowAny]
+    def post(self, request):
+        serializer = WeatherRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-    def get(self, request):
-        lat = request.GET.get("lat")
-        lon = request.GET.get("lon")
+        lat = serializer.validated_data["lat"]
+        lon = serializer.validated_data["lon"]
 
-        try:
-            data = build_weather_response(
-                lat=lat,
-                lon=lon
-            )
-            return Response(data, status=status.HTTP_200_OK)
+        data = fetch_weather_and_forecast(lat, lon)
 
-        except WeatherServiceError as error:
-            return Response(
-                {
-                    "error": True,
-                    "message": str(error),
-                },
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
-        except Exception:
-            return Response(
-                {
-                    "error": True,
-                    "message": "Internal server error",
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        return Response(data, status=status.HTTP_200_OK)

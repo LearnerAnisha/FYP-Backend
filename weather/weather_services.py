@@ -1,89 +1,59 @@
 import requests
+from datetime import datetime
 from django.conf import settings
+from collections import OrderedDict
 
+OPENWEATHER_URL = "https://api.openweathermap.org/data/2.5/forecast"
 
-class WeatherServiceError(Exception):
-    """Custom exception for weather service failures."""
-    pass
+def fetch_weather_and_forecast(lat, lon):
+    params = {
+        "lat": lat,
+        "lon": lon,
+        "appid": settings.WEATHER_API_KEY,
+        "units": "metric",
+    }
 
+    response = requests.get(OPENWEATHER_URL, params=params, timeout=10)
+    response.raise_for_status()
 
-# -----------------------------
-# Reverse Geocoding
-# -----------------------------
-def reverse_geocode(lat, lon):
-    try:
-        url = (
-            "https://api.openweathermap.org/geo/1.0/reverse"
-            f"?lat={lat}&lon={lon}&limit=1&appid={settings.OPENWEATHER_API_KEY}"
-        )
+    data = response.json()
+    forecast_list = data["list"]
 
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
+    # -----------------------
+    # CURRENT WEATHER
+    # -----------------------
+    current = forecast_list[0]
 
-        data = response.json()
-        return data[0]["name"] if data else None
+    current_weather = {
+        "temperature": round(current["main"]["temp"]),
+        "humidity": current["main"]["humidity"],
+        "wind_speed": current["wind"]["speed"],
+        "rainfall": current.get("rain", {}).get("3h", 0),
+        "condition": current["weather"][0]["main"],
+    }
 
-    except Exception:
-        return None
+    # -----------------------
+    # 5-DAY FORECAST (1 per day)
+    # -----------------------
+    daily_forecast = OrderedDict()
 
+    for item in forecast_list:
+        date_obj = datetime.fromtimestamp(item["dt"])
+        date_key = date_obj.date()
 
-# -----------------------------
-# Fetch Weather by City
-# -----------------------------
-def fetch_weather_by_city(city):
-    try:
-        url = (
-            "https://api.openweathermap.org/data/2.5/forecast"
-            f"?q={city}&units=metric&appid={settings.OPENWEATHER_API_KEY}"
-        )
-
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        return response.json()
-
-    except Exception:
-        raise WeatherServiceError("Failed to fetch weather data")
-
-
-# -----------------------------
-# Build Final Weather Response
-# -----------------------------
-def build_weather_response(lat=None, lon=None):
-    # 1️⃣ Determine city
-    city = None
-
-    if lat and lon:
-        city = reverse_geocode(lat, lon)
-
-    if not city:
-        city = "Kathmandu"
-
-    # 2️⃣ Fetch weather
-    raw_data = fetch_weather_by_city(city)
-
-    try:
-        current = raw_data["list"][0]
-
-        forecast = []
-        for item in raw_data["list"][::8][:5]:
-            forecast.append({
-                "day": item["dt_txt"].split(" ")[0],
-                "temperature": item["main"]["temp"],
+        if date_key not in daily_forecast:
+            daily_forecast[date_key] = {
+                "date": date_obj.strftime("%Y-%m-%d"),
+                "day": date_obj.strftime("%A"),   # Monday, Tuesday
+                "temp": round(item["main"]["temp"]),
                 "condition": item["weather"][0]["main"],
-                "rain_probability": item.get("pop", 0) * 100,
-            })
+                "rain": item.get("rain", {}).get("3h", 0),
+            }
 
-        return {
-            "city": city,
-            "current": {
-                "temperature": current["main"]["temp"],
-                "humidity": current["main"]["humidity"],
-                "wind_speed": current["wind"]["speed"],
-                "rainfall": current.get("rain", {}).get("3h", 0),
-                "condition": current["weather"][0]["main"],
-            },
-            "forecast": forecast,
-        }
+        if len(daily_forecast) == 5:
+            break
 
-    except Exception:
-        raise WeatherServiceError("Malformed weather data received")
+    return {
+        "current": current_weather,
+        "forecast": list(daily_forecast.values())
+    }

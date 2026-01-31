@@ -43,9 +43,8 @@ class GeminiService:
                 for day in forecast
             ]
         )
-
         return f"""
-You are an agricultural expert advisor. Provide specific, actionable advice for farmers.
+You are an agricultural expert advisor.
 
 Crop Information:
 - Crop Name: {crop_name}
@@ -53,22 +52,36 @@ Crop Information:
 
 Current Weather Conditions:
 - Temperature: {current.get('temperature', 'N/A')}°C
-- Feels Like: {current.get('feels_like', 'N/A')}°C
 - Humidity: {current.get('humidity', 'N/A')}%
 - Conditions: {current.get('description', 'N/A')}
-- Wind Speed: {current.get('wind_speed', 'N/A')} m/s
-- Location: {current.get('location', 'N/A')}
 
-5-Day Forecast:
-{forecast_text}
+Respond ONLY in valid JSON using this exact format:
 
-Based on this information, provide:
-1. Assessment of current weather impact on this crop at this growth stage
-2. Specific recommendations for the next 5 days
-3. Any warnings or precautions needed
-4. Irrigation, fertilization, or pest control suggestions if relevant
+{{
+  "irrigation": {{
+    "title": "",
+    "description": "",
+    "amount": "",
+    "timing": "",
+    "frequency": ""
+  }},
+  "fertilization": {{
+    "type": "",
+    "amount": "",
+    "method": "",
+    "timing": "",
+    "notes": ""
+  }},
+  "alerts": [
+    {{
+      "type": "warning",
+      "title": "",
+      "message": ""
+    }}
+  ]
+}}
 
-Keep the advice practical and specific to the weather conditions.
+Do not include explanations or markdown.
 """.strip()
 
     # Simple chat (stateless, DRF-friendly)

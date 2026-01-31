@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
 import uuid
+import json
 from rest_framework.permissions import AllowAny
 from .models import ChatConversation, ChatMessage, CropSuggestion
 from .serializers import (
@@ -22,7 +23,7 @@ class WeatherView(APIView):
     GET endpoint to fetch weather data
     Usage: GET /api/weather/?location=Kathmandu
     """
-    
+    permission_classes = [AllowAny]
     def get(self, request):
         # Validate input
         serializer = WeatherRequestSerializer(data=request.query_params)
@@ -63,7 +64,7 @@ class CropSuggestionView(APIView):
         "session_id": "optional-session-id"
     }
     """
-    
+    permission_classes = [AllowAny]
     def post(self, request):
         # Validate input
         serializer = CropSuggestionRequestSerializer(data=request.data)
@@ -82,16 +83,19 @@ class CropSuggestionView(APIView):
             
             # Step 2: Get AI suggestion using Gemini
             gemini_service = GeminiService()
-            suggestion = gemini_service.get_crop_suggestion(
+            raw = gemini_service.get_crop_suggestion(
                 crop_name=crop_name,
                 growth_stage=growth_stage,
                 weather_data=weather_data
             )
+            suggestion = json.loads(raw)
+            
+            user = request.user if request.user.is_authenticated else None
             
             # Step 3: Get or create conversation
             conversation, created = ChatConversation.objects.get_or_create(
             session_id=session_id,
-            user = request.user
+            user = user
            )
 
             # Step 4: Save to database
@@ -131,7 +135,7 @@ class ChatView(APIView):
         "message": "What fertilizer should I use for tomatoes?"
     }
     """
-    
+    permission_classes = [AllowAny]
     def post(self, request):
         # Validate input
         serializer = ChatRequestSerializer(data=request.data)
