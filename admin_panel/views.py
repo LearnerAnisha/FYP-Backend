@@ -31,6 +31,17 @@ from .serializers import (
     ScanResultListSerializer,
     ScanResultDetailSerializer,
 )
+from price_predictor.models import MasterProduct, DailyPriceHistory
+from price_predictor.views import (
+    FetchMarketPriceAPIView,
+    MarketPriceAnalysisAPIView,
+    PriceStatsAPIView,
+)
+from .serializers import (
+    AdminMasterProductSerializer,
+    AdminDailyPriceHistorySerializer,
+)
+
 from .permissions import IsAdminUser
 from .utils import log_admin_action
 
@@ -49,7 +60,11 @@ class AdminLoginView(generics.GenericAPIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = self.get_serializer(data=request.data)
+        login_data = {
+    "identifier": request.data.get("email"),
+    "password": request.data.get("password"),
+}
+        serializer = self.get_serializer(data=login_data)
         serializer.is_valid(raise_exception=True)
         
         user = serializer.validated_data["user"]
@@ -447,3 +462,42 @@ class AdminActivityLogListView(generics.ListAPIView):
             queryset = queryset.filter(description__icontains=search)
         
         return queryset.order_by('-timestamp')
+    
+# price management
+class AdminMasterProductListView(generics.ListAPIView):
+    """
+    Admin view: list latest commodity prices.
+    """
+    serializer_class = AdminMasterProductSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = AdminPagination
+
+    queryset = MasterProduct.objects.all()
+
+class AdminDailyPriceHistoryListView(generics.ListAPIView):
+    """
+    Admin view: daily historical price records.
+    """
+    serializer_class = AdminDailyPriceHistorySerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = AdminPagination
+
+    queryset = DailyPriceHistory.objects.all()
+
+class AdminMarketPriceAnalysisView(MarketPriceAnalysisAPIView):
+    """
+    Admin view: market trend analysis.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+class AdminFetchMarketPricesView(FetchMarketPriceAPIView):
+    """
+    Admin-only trigger for fetching market prices.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+class AdminPriceStatsView(PriceStatsAPIView):
+    """
+    Admin-only price dashboard stats.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]

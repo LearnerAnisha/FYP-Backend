@@ -1,5 +1,6 @@
 import requests
 from datetime import datetime
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -107,10 +108,10 @@ class LatestPricesAPIView(ListAPIView):
         OrderingFilter,
     ]
 
-    # 🔍 Search
+    # Search
     search_fields = ["commodityname"]
 
-    # 🎚 Filter (from filters.py)
+    # Filter (from filters.py)
     filterset_class = MasterProductFilter
 
     # ↕ Sorting
@@ -201,4 +202,29 @@ class MarketPriceAnalysisAPIView(APIView):
             "yesterday": str(yesterday),
             "market_trend": market_trend,
             "changes": results
+        })
+        
+class PriceStatsAPIView(APIView):
+    """
+    Price Predictor dashboard statistics (app-level logic).
+    """
+
+    def get(self, request):
+        today = timezone.now().date()
+
+        total_products = MasterProduct.objects.count()
+
+        updated_today = MasterProduct.objects.filter(
+            dailypricehistory__date=today
+        ).distinct().count()
+
+        missing_today = total_products - updated_today
+
+        total_price_records = DailyPriceHistory.objects.count()
+
+        return Response({
+            "total_products": total_products,
+            "updated_today": updated_today,
+            "missing_today": missing_today,
+            "total_price_records": total_price_records,
         })

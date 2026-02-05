@@ -7,12 +7,12 @@ Serializers for admin panel operations with your existing models.
 from rest_framework import serializers
 from authentication.models import User, FarmerProfile
 from chatbot.models import ChatConversation, ChatMessage, WeatherData, CropSuggestion
+from price_predictor.models import MasterProduct, DailyPriceHistory
 from CropDiseaseDetection.models import ScanResult
 from .models import AdminActivityLog
 from django.utils.timezone import now
 
 # ========== USER MANAGEMENT SERIALIZERS ==========
-
 class AdminFarmerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = FarmerProfile
@@ -218,3 +218,38 @@ class AdminActivityLogSerializer(serializers.ModelSerializer):
             'metadata',
         ]
         read_only_fields = ['timestamp']
+
+# ========== PRICE PREDICTOR SERIALIZERS ==========
+
+class AdminMasterProductSerializer(serializers.ModelSerializer):
+    """
+    Admin serializer for latest commodity snapshot.
+    """
+    class Meta:
+        model = MasterProduct
+        fields = [
+            "id",
+            "commodityname",
+            "commodityunit",
+            "min_price",
+            "max_price",
+            "avg_price",
+            "last_price",
+            "insert_date",
+            "last_update",
+        ]
+
+
+class AdminDailyPriceHistorySerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.commodityname", read_only=True)
+
+    class Meta:
+        model = DailyPriceHistory
+        fields = [
+            "id",
+            "product_name",
+            "date",
+            "min_price",
+            "max_price",
+            "avg_price",
+        ]

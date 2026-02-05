@@ -4,6 +4,7 @@ from .views import (
     LatestPricesAPIView,
     DailyPriceHistoryAPIView,
     MarketPriceAnalysisAPIView,
+    PriceStatsAPIView,
 )
 
 urlpatterns = [
@@ -11,4 +12,5 @@ urlpatterns = [
     path("latest/", LatestPricesAPIView.as_view(), name="latest-prices"),
     path("history/", DailyPriceHistoryAPIView.as_view(), name="history"),
     path("analysis/", MarketPriceAnalysisAPIView.as_view(), name="analysis"),
+    path("stats/", PriceStatsAPIView.as_view(), name="price-stats"),
 ]
