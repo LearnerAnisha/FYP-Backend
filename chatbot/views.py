@@ -94,9 +94,9 @@ class CropSuggestionView(APIView):
             
             # Step 3: Get or create conversation
             conversation, created = ChatConversation.objects.get_or_create(
-            session_id=session_id,
-            user = user
-           )
+                session_id=session_id,
+                defaults={'user': user}
+            )
 
             # Step 4: Save to database
             crop_suggestion = CropSuggestion.objects.create(
@@ -146,10 +146,12 @@ class ChatView(APIView):
         user_message = serializer.validated_data['message']
         
         try:
+            user = request.user if request.user.is_authenticated else None
+            
             # Get or create conversation
             conversation, created = ChatConversation.objects.get_or_create(
                 session_id=session_id,
-                user = request.user
+                defaults={'user': user}
             )          
             
             # Save user message
@@ -201,11 +203,11 @@ class ChatView(APIView):
 
 
 class ConversationHistoryView(APIView):
-    permission_classes = [AllowAny]
     """
     GET endpoint to retrieve conversation history
     Usage: GET /api/conversation/{session_id}/
     """
+    permission_classes = [AllowAny]
     
     def get(self, request, session_id):
         try:
@@ -221,3 +223,43 @@ class ConversationHistoryView(APIView):
                 'success': False,
                 'error': 'Conversation not found'
             }, status=status.HTTP_404_NOT_FOUND)
+
+
+class UserConversationsView(APIView):
+    """
+    GET endpoint to retrieve all conversations for a user or session
+    Usage: GET /api/conversations/
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        try:
+            # Get all conversations, ordered by most recent
+            conversations = ChatConversation.objects.all().order_by('-updated_at')
+            
+            # If user is authenticated, filter by user
+            if request.user.is_authenticated:
+                conversations = conversations.filter(user=request.user)
+            
+            # Return basic info about each conversation
+            data = []
+            for conv in conversations[:20]:  # Limit to 20 most recent
+                last_message = conv.messages.last()
+                data.append({
+                    'session_id': conv.session_id,
+                    'created_at': conv.created_at,
+                    'updated_at': conv.updated_at,
+                    'message_count': conv.messages.count(),
+                    'last_message': last_message.content[:100] if last_message else None,
+                })
+            
+            return Response({
+                'success': True,
+                'conversations': data
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

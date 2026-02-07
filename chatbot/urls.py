@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    UserConversationsView,
     WeatherView,
     CropSuggestionView,
     ChatView,
@@ -18,4 +19,7 @@ urlpatterns = [
     
     # Conversation history
     path('conversation/<str:session_id>/', ConversationHistoryView.as_view(), name='conversation-history'),
+    
+    # all conversations
+    path('conversations/', UserConversationsView.as_view(), name='user-conversations'),
 ]
