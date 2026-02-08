@@ -7,8 +7,11 @@ URL configuration for admin panel.
 from django.urls import path
 from .views import (
     # Authentication & Dashboard
+    AdminCreateUserView,
+    AdminDailyPriceHistoryDetailView,
     AdminLoginView,
     AdminDashboardStatsView,
+    AdminMasterProductDetailView,
     
     # User Management
     AdminUserListView,
@@ -47,6 +50,7 @@ urlpatterns = [
     
     # ========== USER MANAGEMENT ==========
     path('users/', AdminUserListView.as_view(), name='users-list'),
+    path('users/create/', AdminCreateUserView.as_view(), name='create-user'),  # ADD THIS
     path('users/<int:id>/', AdminUserDetailView.as_view(), name='user-detail'),
     path('users/<int:id>/toggle-status/', AdminToggleUserStatusView.as_view(), name='toggle-status'),
     path('users/<int:id>/verify/', AdminVerifyUserView.as_view(), name='verify-user'),
@@ -67,7 +71,9 @@ urlpatterns = [
     
     # ========== PRICE PREDICTOR (ADMIN) ==========
     path("products/", AdminMasterProductListView.as_view(), name="admin-products"),
+    path("products/<int:id>/", AdminMasterProductDetailView.as_view(), name="admin-product-detail"),
     path("history/", AdminDailyPriceHistoryListView.as_view(), name="admin-price-history"),
+    path("history/<int:id>/", AdminDailyPriceHistoryDetailView.as_view(), name="admin-price-history-detail"),
     path("analysis/", AdminMarketPriceAnalysisView.as_view(), name="admin-price-analysis"),
     path("fetch/", AdminFetchMarketPricesView.as_view(), name="admin-price-fetch"),
     path("price-stats/", AdminPriceStatsView.as_view(), name="admin-price-stats"),

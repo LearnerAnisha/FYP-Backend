@@ -5,12 +5,13 @@ Serializers for admin panel operations with your existing models.
 """
 
 from rest_framework import serializers
+import re
+from django.utils.timezone import now
 from authentication.models import User, FarmerProfile
 from chatbot.models import ChatConversation, ChatMessage, WeatherData, CropSuggestion
 from price_predictor.models import MasterProduct, DailyPriceHistory
 from CropDiseaseDetection.models import ScanResult
 from .models import AdminActivityLog
-from django.utils.timezone import now
 
 # ========== USER MANAGEMENT SERIALIZERS ==========
 class AdminFarmerProfileSerializer(serializers.ModelSerializer):
@@ -56,10 +57,11 @@ class AdminUserListSerializer(serializers.ModelSerializer):
 
 class AdminUserDetailSerializer(serializers.ModelSerializer):
     """
-    Detailed serializer for single user view/edit.
+    Detailed serializer for single user view/edit/create.
     """
     farmer_profile = AdminFarmerProfileSerializer(required=False)
     last_login = serializers.DateTimeField(read_only=True)
+    password = serializers.CharField(write_only=True, required=False)
     
     class Meta:
         model = User
@@ -68,6 +70,7 @@ class AdminUserDetailSerializer(serializers.ModelSerializer):
             'full_name',
             'email',
             'phone',
+            'password',
             'avatar',
             'is_verified',
             'is_active',
@@ -78,14 +81,73 @@ class AdminUserDetailSerializer(serializers.ModelSerializer):
             'accepted_terms',
             'farmer_profile',
         ]
-        read_only_fields = ['email', 'date_joined', 'last_login']
+        read_only_fields = ['id', 'date_joined', 'last_login']
+    
+    def validate_full_name(self, value):
+        """Validate full name format"""
+        value = value.strip()
+        if len(value.split()) < 2:
+            raise serializers.ValidationError(
+                "Full name must include at least first and last name."
+            )
+        if not re.match(r"^[A-Za-z ]+$", value):
+            raise serializers.ValidationError(
+                "Full name can only contain letters and spaces."
+            )
+        return value
+    
+    def validate_phone(self, value):
+        """Validate Nepal phone number format"""
+        if not re.match(r"^(98|97)\d{8}$", value):
+            raise serializers.ValidationError(
+                "Phone number must start with 98 or 97 and contain exactly 10 digits."
+            )
+        return value
+    
+    def validate_email(self, value):
+        """Check for duplicate email (only on create)"""
+        if self.instance is None:  # Creating new user
+            if User.objects.filter(email=value).exists():
+                raise serializers.ValidationError(
+                    "An account with this email already exists."
+                )
+        return value
+    
+    def validate_password(self, value):
+        """Strong password validation"""
+        if not value:
+            return value
+            
+        if len(value) < 8:
+            raise serializers.ValidationError(
+                "Password must be at least 8 characters long."
+            )
+        if not re.search(r"[A-Z]", value):
+            raise serializers.ValidationError(
+                "Password must contain at least one uppercase letter."
+            )
+        if not re.search(r"[0-9]", value):
+            raise serializers.ValidationError(
+                "Password must contain at least one number."
+            )
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", value):
+            raise serializers.ValidationError(
+                "Password must contain at least one special character."
+            )
+        return value
     
     def update(self, instance, validated_data):
         farmer_data = validated_data.pop('farmer_profile', None)
+        password = validated_data.pop('password', None)
         
         # Update User fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        
+        # Update password if provided
+        if password:
+            instance.set_password(password)
+        
         instance.save()
         
         # Update or create FarmerProfile
@@ -222,31 +284,23 @@ class AdminActivityLogSerializer(serializers.ModelSerializer):
 # ========== PRICE PREDICTOR SERIALIZERS ==========
 
 class AdminMasterProductSerializer(serializers.ModelSerializer):
-    """
-    Admin serializer for latest commodity snapshot.
-    """
+    """Admin serializer for MasterProduct with full CRUD support."""
     class Meta:
         model = MasterProduct
-        fields = [
-            "id",
-            "commodityname",
-            "commodityunit",
-            "min_price",
-            "max_price",
-            "avg_price",
-            "last_price",
-            "insert_date",
-            "last_update",
-        ]
-
+        fields = "__all__"
+        read_only_fields = ['insert_date', 'last_update']
 
 class AdminDailyPriceHistorySerializer(serializers.ModelSerializer):
+    """Admin serializer for DailyPriceHistory with product name."""
     product_name = serializers.CharField(source="product.commodityname", read_only=True)
-
+    product_id = serializers.IntegerField(source="product.id", read_only=True)
+    
     class Meta:
         model = DailyPriceHistory
         fields = [
             "id",
+            "product",
+            "product_id",
             "product_name",
             "date",
             "min_price",

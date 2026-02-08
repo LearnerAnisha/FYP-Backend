@@ -29,11 +29,26 @@ class FetchMarketPriceAPIView(APIView):
     def get(self, request):
         
         api_url = "https://kalimatimarket.gov.np/api/daily-prices/en"
-
+        
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0"
+        }
         try:
-            response = requests.get(api_url)
+            response = requests.get(api_url,headers=headers,timeout=15)
             response.raise_for_status()
             data = response.json()
+            
+            if "date" not in data or "prices" not in data:
+                return Response(
+            {
+                "error": "Invalid API response",
+                "received_keys": list(data.keys()),
+                "raw_response": data
+            },
+            status=500
+        )
         except Exception as e:
             return Response({"error": f"API fetch failed: {str(e)}"},
                             status=status.HTTP_400_BAD_REQUEST)

@@ -4,13 +4,15 @@ admin_panel/views.py
 API views for admin panel operations with your existing models.
 """
 
-from rest_framework import generics, status, filters
+from rest_framework import generics, status
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.db.models import Q, Count
+from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 
@@ -166,6 +168,78 @@ class AdminDashboardStatsView(APIView):
         })
 
 # ========== USER MANAGEMENT ==========
+
+# Add this new view for creating users
+class AdminCreateUserView(generics.CreateAPIView):
+    """
+    Admin endpoint to create a new user.
+    """
+    serializer_class = AdminUserDetailSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def create(self, request, *args, **kwargs):
+        # Extract data
+        data = request.data.copy()
+        password = data.pop('password', None)
+        
+        if not password:
+            return Response(
+                {"password": ["Password is required."]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Use serializer for validation
+        serializer = self.get_serializer(data=data)
+        
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as e:
+            return Response(
+                {"errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create user
+        try:
+            user = User.objects.create_user(
+                full_name=serializer.validated_data['full_name'],
+                email=serializer.validated_data['email'],
+                phone=serializer.validated_data['phone'],
+                password=password,
+                is_verified=serializer.validated_data.get('is_verified', False),
+                is_active=serializer.validated_data.get('is_active', True),
+                is_staff=serializer.validated_data.get('is_staff', False),
+                is_superuser=serializer.validated_data.get('is_superuser', False),
+                accepted_terms=serializer.validated_data.get('accepted_terms', True)
+            )
+            
+            # Handle farmer profile if provided
+            farmer_data = request.data.get('farmer_profile')
+            if farmer_data:
+                FarmerProfile.objects.create(user=user, **farmer_data)
+            
+            # Log action
+            log_admin_action(
+                admin_user=request.user,
+                action='create',
+                description=f"Created new user {user.email}",
+                target_user=user,
+                request=request
+            )
+            
+            return Response(
+                {
+                    "message": "User created successfully.",
+                    "user": AdminUserDetailSerializer(user).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+            
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class AdminUserListView(generics.ListAPIView):
     """
@@ -463,26 +537,97 @@ class AdminActivityLogListView(generics.ListAPIView):
         
         return queryset.order_by('-timestamp')
     
-# price management
+# ========== PRICE PREDICTOR MANAGEMENT ==========
+
 class AdminMasterProductListView(generics.ListAPIView):
     """
-    Admin view: list latest commodity prices.
+    Admin view: list latest commodity prices with search and filters.
     """
     serializer_class = AdminMasterProductSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = AdminPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    
+    # Enable search on commodity name
+    search_fields = ['commodityname', 'commodityunit']
+    
+    # Enable ordering
+    ordering_fields = ['commodityname', 'min_price', 'max_price', 'avg_price', 'last_price', 'last_update']
+    ordering = ['commodityname']  # default ordering
 
     queryset = MasterProduct.objects.all()
 
+class AdminMasterProductDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Admin view: retrieve, update, or delete a specific product.
+    """
+    queryset = MasterProduct.objects.all()
+    serializer_class = AdminMasterProductSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    lookup_field = 'id'
+    
+    def perform_update(self, serializer):
+        product = serializer.save()
+        log_admin_action(
+            admin_user=self.request.user,
+            action='update',
+            description=f"Updated product {product.commodityname}",
+            request=self.request
+        )
+    
+    def perform_destroy(self, instance):
+        log_admin_action(
+            admin_user=self.request.user,
+            action='delete',
+            description=f"Deleted product {instance.commodityname}",
+            request=self.request
+        )
+        instance.delete()
+
 class AdminDailyPriceHistoryListView(generics.ListAPIView):
     """
-    Admin view: daily historical price records.
+    Admin view: daily historical price records with search and filters.
     """
     serializer_class = AdminDailyPriceHistorySerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     pagination_class = AdminPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    
+    # Enable search on product name
+    search_fields = ['product__commodityname']
+    
+    # Enable ordering
+    ordering_fields = ['date', 'avg_price', 'min_price', 'max_price']
+    ordering = ['-date']  # default ordering (newest first)
 
-    queryset = DailyPriceHistory.objects.all()
+    queryset = DailyPriceHistory.objects.select_related('product').all()
+
+class AdminDailyPriceHistoryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Admin view: retrieve, update, or delete a specific price history entry.
+    """
+    queryset = DailyPriceHistory.objects.select_related('product').all()
+    serializer_class = AdminDailyPriceHistorySerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    lookup_field = 'id'
+    
+    def perform_update(self, serializer):
+        entry = serializer.save()
+        log_admin_action(
+            admin_user=self.request.user,
+            action='update',
+            description=f"Updated price history for {entry.product.commodityname} on {entry.date}",
+            request=self.request
+        )
+    
+    def perform_destroy(self, instance):
+        log_admin_action(
+            admin_user=self.request.user,
+            action='delete',
+            description=f"Deleted price history for {instance.product.commodityname} on {instance.date}",
+            request=self.request
+        )
+        instance.delete()
 
 class AdminMarketPriceAnalysisView(MarketPriceAnalysisAPIView):
     """
