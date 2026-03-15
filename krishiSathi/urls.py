@@ -43,6 +43,7 @@ urlpatterns = [
    path("api/disease/", include("CropDiseaseDetection.urls")),
    path("api/admin/", include("admin_panel.urls")),
    path("api/chatbot/", include("chatbot.urls")),
+   path("api/payment/", include("payment.urls")),
 ]
 
 if settings.DEBUG:

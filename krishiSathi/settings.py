@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'CropDiseaseDetection',
     'admin_panel',
     'chatbot',
+    'payment',
 
     # Third-aprty
     'rest_framework',
@@ -217,3 +218,11 @@ SIMPLE_JWT = {
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_MODEL = "llama3.2"           
 OLLAMA_VISION_MODEL = "llava" 
+
+# ESEWA CONFIGURATION 
+FRONTEND_URL = "http://localhost:5173"
+
+ESEWA_SECRET_KEY = config("ESEWA_SECRET_KEY", default="8gBm/:&EnhH.1/q")
+ESEWA_PRODUCT_CODE = config("ESEWA_PRODUCT_CODE", default="EPAYTEST")
+ESEWA_BASE_URL = config("ESEWA_BASE_URL", default="https://rc-epay.esewa.com.np")
+DOMAIN = config("DOMAIN", default="http://localhost:8000")
