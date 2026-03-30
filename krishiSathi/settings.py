@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'admin_panel',
     'chatbot',
     'payment',
+    'kalimati_forecast',
 
     # Third-aprty
     'rest_framework',
@@ -226,3 +227,13 @@ ESEWA_SECRET_KEY = config("ESEWA_SECRET_KEY", default="8gBm/:&EnhH.1/q")
 ESEWA_PRODUCT_CODE = config("ESEWA_PRODUCT_CODE", default="EPAYTEST")
 ESEWA_BASE_URL = config("ESEWA_BASE_URL", default="https://rc-epay.esewa.com.np")
 DOMAIN = config("DOMAIN", default="http://localhost:8000")
+
+# Directory where trained model .pkl files are saved
+MODELS_DIR = BASE_DIR / 'kalimati_forecast' / 'models_ml'
+MODELS_DIR.mkdir(exist_ok=True)
+ 
+# Directory for uploaded CSV data
+DATA_DIR = BASE_DIR / 'kalimati_forecast' / 'data'
+DATA_DIR.mkdir(exist_ok=True)
+ 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
