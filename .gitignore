@@ -1,1 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual env
+venv/
+
+# Environment variables
 .env
+
+# ML models
+models_ml/
+*.pkl
