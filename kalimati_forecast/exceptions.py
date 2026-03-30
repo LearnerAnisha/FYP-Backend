@@ -43,7 +43,7 @@ class ErrorCode:
     INTERNAL_ERROR = "INTERNAL_ERROR"
 
 
-# ── Custom exception classes ───────────────────────────────────────────────────
+# Custom exception classes 
 
 
 class ForecastAPIError(Exception):
@@ -172,7 +172,7 @@ class ForecastFailedError(ForecastAPIError):
         )
 
 
-# ── DRF global exception handler ──────────────────────────────────────────────
+# DRF global exception handler 
 
 
 def custom_exception_handler(exc, context):

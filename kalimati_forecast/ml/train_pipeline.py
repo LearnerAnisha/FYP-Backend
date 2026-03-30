@@ -65,7 +65,7 @@ def train_commodity(
     print(f"  Training: {commodity.upper()}")
     print(f"{'='*60}")
 
-    # ── 1. Load data ───────────────────────────────────────────────────────────
+    # 1. Load data 
     df = load_csv(csv_path)  # raises InvalidCSVError if bad
     series = prepare_series(
         df, commodity
@@ -75,7 +75,7 @@ def train_commodity(
         f"  Data: {series.index[0].date()} → {series.index[-1].date()} ({len(series)} days)"
     )
 
-    # ── 2. Train / test split ──────────────────────────────────────────────────
+    # 2. Train / test split
     train_series, test_series = train_test_split_ts(series, test_days=test_days)
     print(f"  Split: {len(train_series)} train / {len(test_series)} test days")
 
@@ -85,7 +85,7 @@ def train_commodity(
     sarimax_model = None
     lgbm_model = None
 
-    # ── 3. Fit SARIMAX ─────────────────────────────────────────────────────────
+    # 3. Fit SARIMAX 
     print("\n  [1/2] Fitting SARIMAX ...")
     try:
         sarimax_model = fit_sarimax(train_series)
@@ -105,7 +105,7 @@ def train_commodity(
         metrics["sarimax"] = {"error": str(e)}
         sarimax_preds = None
 
-    # ── 4. Fit LightGBM ────────────────────────────────────────────────────────
+    #  4. Fit LightGBM 
     print("  [2/2] Fitting LightGBM ...")
     try:
         feature_df = build_features(train_series)
@@ -126,7 +126,7 @@ def train_commodity(
         metrics["lgbm"] = {"error": str(e)}
         lgbm_preds = None
 
-    # ── 5. Both models failed ──────────────────────────────────────────────────
+    #  5. Both models failed 
     if sarimax_preds is None and lgbm_preds is None:
         raise TrainingFailedError(
             "ensemble",
@@ -134,7 +134,7 @@ def train_commodity(
             "Check data quality and logs for details.",
         )
 
-    # ── 6. Ensemble weights ────────────────────────────────────────────────────
+    # 6. Ensemble weights 
     if sarimax_preds is not None and lgbm_preds is not None:
         weights = optimize_weights(sarimax_preds, lgbm_preds, test_series.values)
 

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Minimum days needed to train models reliably
 MIN_TRAIN_DAYS = 90
 
-# ── Nepal festival calendar ────────────────────────────────────────────────────
+#  Nepal festival calendar
 NEPAL_FESTIVALS = {
     date(2023, 10, 24),
     date(2024, 10, 13),
@@ -53,7 +53,7 @@ def _festival_flag(d) -> int:
         return 0
 
 
-# ── Column name aliases (handles various Kalimati CSV formats) ────────────────
+# Column name aliases (handles various Kalimati CSV formats)
 _COL_ALIASES = {
     "commodity_name": "commodity",
     "commodity name": "commodity",
