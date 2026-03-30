@@ -11,3 +11,6 @@ venv/
 # ML models
 models_ml/
 *.pkl
+
+# Data files 
+*.csv
