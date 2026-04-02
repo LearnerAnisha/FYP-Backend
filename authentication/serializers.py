@@ -9,6 +9,7 @@ import re
 from rest_framework import serializers
 from .models import FarmerProfile, User
 from django.utils.timezone import now
+from payment.models import Subscription
 
 class RegisterSerializer(serializers.ModelSerializer):
     """
@@ -142,10 +143,15 @@ class FarmerProfileSerializer(serializers.ModelSerializer):
             "language",
             "bio",
         ]
+
+class SubscriptionBriefSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Subscription
+        fields = ["plan", "is_active", "expires_at"]
 class ProfileSerializer(serializers.ModelSerializer):
     active_days = serializers.SerializerMethodField()
     farmer_profile = FarmerProfileSerializer(required=False)
-
+    subscription = SubscriptionBriefSerializer(read_only=True)
     class Meta:
         model = User
         fields = [
@@ -156,6 +162,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             "date_joined",
             "active_days",
             "farmer_profile",
+            "subscription",
         ]
         read_only_fields = ["email", "date_joined"]
 
@@ -178,3 +185,4 @@ class ProfileSerializer(serializers.ModelSerializer):
             profile.save()
 
         return instance
+    

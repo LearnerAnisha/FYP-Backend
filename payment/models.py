@@ -1,56 +1,70 @@
 import uuid
 from django.db import models
+from django.conf import settings
 
 class Payment(models.Model):
-    """
-    Stores all payment records initiated through eSewa.
-    """
-
     class Status(models.TextChoices):
-        PENDING  = "PENDING",  "Pending"
+        PENDING = "PENDING", "Pending"
         COMPLETE = "COMPLETE", "Complete"
-        FAILED   = "FAILED",   "Failed"
+        FAILED = "FAILED", "Failed"
         REFUNDED = "REFUNDED", "Refunded"
 
-    # ── Identifiers ─────────────────────────────────────────────────────────
-    transaction_uuid = models.UUIDField(
-        default=uuid.uuid4,
-        unique=True,
-        editable=False,
-        help_text="Unique transaction ID sent to eSewa.",
+    # Link to user (nullable so existing anonymous payments don't break)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments",
     )
 
-    # ── Amount breakdown ─────────────────────────────────────────────────────
-    amount          = models.DecimalField(max_digits=12, decimal_places=2, help_text="Base product/service amount.")
-    tax_amount      = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Tax component.")
-    service_charge  = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Service charge.")
-    delivery_charge = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Delivery charge.")
-    total_amount    = models.DecimalField(max_digits=12, decimal_places=2, help_text="Sum of all amount fields.")
-
-    # ── Status ───────────────────────────────────────────────────────────────
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.PENDING,
-        db_index=True,
-    )
-
-    # ── eSewa response fields ────────────────────────────────────────────────
-    esewa_ref_id        = models.CharField(max_length=100, blank=True, null=True, help_text="Reference ID from eSewa after success.")
-    esewa_raw_response  = models.JSONField(blank=True, null=True, help_text="Full raw eSewa verification API response.")
-
-    # ── Timestamps ───────────────────────────────────────────────────────────
-    created_at     = models.DateTimeField(auto_now_add=True)
-    updated_at     = models.DateTimeField(auto_now=True)
-
-    # ── Optional: link to your user/order ────────────────────────────────────
-    # user  = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    # order = models.ForeignKey("orders.Order", on_delete=models.SET_NULL, null=True, blank=True)
+    transaction_uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    service_charge = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    delivery_charge = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    esewa_ref_id = models.CharField(max_length=100, blank=True, null=True)
+    esewa_raw_response = models.JSONField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
-        verbose_name = "Payment"
-        verbose_name_plural = "Payments"
 
     def __str__(self):
-        return f"Payment #{self.pk} | {self.transaction_uuid} | {self.status} | NPR {self.total_amount}"
+        return f"Payment #{self.pk} | {self.transaction_uuid} | {self.status}"
+
+class Subscription(models.Model):
+    class Plan(models.TextChoices):
+        BASIC = "BASIC", "Basic"
+        PRO = "PRO", "Pro"
+        PREMIUM = "PREMIUM", "Premium"
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="subscription",
+    )
+    payment = models.ForeignKey(
+        Payment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subscriptions",
+    )
+    plan = models.CharField(max_length=20, choices=Plan.choices, default=Plan.BASIC)
+    is_active = models.BooleanField(default=True)
+    starts_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"Subscription({self.user.email} | {self.plan} | active={self.is_active})"
+        )

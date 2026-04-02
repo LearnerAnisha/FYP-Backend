@@ -15,7 +15,7 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-# ─── SIGNATURE HELPERS ────────────────────────────────────────────────────────
+# SIGNATURE HELPERS─
 
 def generate_esewa_signature(total_amount: str, transaction_uuid: str, product_code: str) -> str:
     """
@@ -71,7 +71,7 @@ def verify_esewa_signature(data_string: str, received_signature: str) -> bool:
 
     return is_valid
 
-# ─── DECODE ESEWA CALLBACK DATA ───────────────────────────────────────────────
+# DECODE ESEWA CALLBACK DATA 
 
 def decode_esewa_response(encoded_data: str) -> dict:
     """
@@ -102,7 +102,7 @@ def decode_esewa_response(encoded_data: str) -> dict:
         raise ValueError("Invalid JSON in eSewa response data.")
 
 
-# ─── VERIFY WITH ESEWA STATUS API ────────────────────────────────────────────
+# VERIFY WITH ESEWA STATUS API
 
 def verify_payment_with_esewa(transaction_uuid: str, total_amount: str) -> dict:
     """
