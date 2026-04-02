@@ -12,6 +12,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.generics import ListAPIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from datetime import timedelta
+from django.utils import timezone
 
 class FetchMarketPriceAPIView(APIView):
     """
@@ -243,3 +245,22 @@ class PriceStatsAPIView(APIView):
             "missing_today": missing_today,
             "total_price_records": total_price_records,
         })
+        
+class LastMonthHistoryView(APIView):
+    """
+    Returns last 30 days of data for a specific commodity
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, commodity):
+        today = timezone.now().date()
+        start_date = today - timedelta(days=30)
+
+        data = DailyPriceHistory.objects.filter(
+            product__commodityname__icontains=commodity,
+            date__gte=start_date
+        ).order_by("date")
+
+        serializer = DailyPriceHistorySerializer(data, many=True)
+        return Response(serializer.data)

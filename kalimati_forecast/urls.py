@@ -11,17 +11,17 @@ from .views import (
 
 urlpatterns = [
     # Core forecast
-    path("forecast/",         ForecastView.as_view(),        name="forecast"),
+    path("forecast/",ForecastView.as_view(), name="forecast"),
 
     # Market data (live prices + yesterday comparison)
-    path("market-analysis/",  MarketAnalysisView.as_view(),  name="market-analysis"),
+    path("market-analysis/",  MarketAnalysisView.as_view(), name="market-analysis"),
 
     # Data management
-    path("upload/",           UploadCSVView.as_view(),        name="upload"),
-    path("retrain/",          RetrainView.as_view(),          name="retrain"),
+    path("upload/", UploadCSVView.as_view(), name="upload"),
+    path("retrain/", RetrainView.as_view(), name="retrain"),
 
     # Info endpoints
-    path("commodities/",      CommoditiesView.as_view(),      name="commodities"),
-    path("metrics/",          MetricsView.as_view(),          name="metrics"),
-    path("history/<str:commodity>/", HistoryView.as_view(),   name="history"),
+    path("commodities/", CommoditiesView.as_view(), name="commodities"),
+    path("metrics/", MetricsView.as_view(), name="metrics"),
+    path("history/<str:commodity>/", HistoryView.as_view(), name="history"),
 ]

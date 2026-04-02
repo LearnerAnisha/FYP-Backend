@@ -2,6 +2,9 @@
 Preprocessing pipeline for Kalimati market price data.
 Every public function raises a typed ForecastAPIError on failure —
 callers never see raw exceptions from pandas or numpy.
+
+Updated: load_from_db() added — reads directly from
+price_predictor.DailyPriceHistory instead of a CSV file.
 """
 
 import logging
@@ -21,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Minimum days needed to train models reliably
 MIN_TRAIN_DAYS = 90
 
-#  Nepal festival calendar
+# Nepal festival calendar
 NEPAL_FESTIVALS = {
     date(2023, 10, 24),
     date(2024, 10, 13),
@@ -70,6 +73,112 @@ _COL_ALIASES = {
 
 REQUIRED_COLUMNS = ["commodity", "avg_price"]
 
+# Data loading
+
+def load_from_db() -> pd.DataFrame:
+    """
+    Load Kalimati price history directly from
+    price_predictor.DailyPriceHistory (Django ORM).
+
+    Returns a DataFrame with the same schema as load_csv():
+        commodity  : str
+        date       : datetime64
+        avg_price  : float
+        min_price  : float
+        max_price  : float
+
+    This means prepare_series(), build_features(), and the entire
+    training pipeline work without any further changes.
+
+    Raises:
+        InvalidCSVError — DB is empty, app not installed, or query failed.
+    """
+    try:
+        from price_predictor.models import DailyPriceHistory
+    except ImportError as e:
+        raise InvalidCSVError(
+            detail=(
+                f"Cannot import price_predictor models: {e}. "
+                "Ensure 'price_predictor' is listed in INSTALLED_APPS."
+            )
+        )
+
+    try:
+        qs = (
+            DailyPriceHistory.objects.select_related("product")
+            .values(
+                "date",
+                "avg_price",
+                "min_price",
+                "max_price",
+                commodity=_F("product__commodityname"),
+            )
+            .order_by("date")
+        )
+
+        if not qs.exists():
+            raise InvalidCSVError(
+                detail=(
+                    "price_predictor.DailyPriceHistory is empty. "
+                    "Run the Kalimati market-price fetch endpoint first."
+                )
+            )
+
+        df = pd.DataFrame.from_records(list(qs))
+
+    except InvalidCSVError:
+        raise
+    except Exception as e:
+        raise InvalidCSVError(detail=f"Database read failed: {e}")
+
+    # Normalise
+
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    bad_dates = df["date"].isna().sum()
+    if bad_dates == len(df):
+        raise InvalidCSVError(
+            detail="Every row has an unparseable date in DailyPriceHistory."
+        )
+    if bad_dates > 0:
+        logger.warning("Dropped %d rows with unparseable dates from DB.", bad_dates)
+        df = df.dropna(subset=["date"])
+
+    df["avg_price"] = pd.to_numeric(df["avg_price"], errors="coerce")
+    bad_prices = df["avg_price"].isna().sum()
+    if bad_prices == len(df):
+        raise InvalidCSVError(
+            detail="avg_price column has no numeric values in DailyPriceHistory."
+        )
+    if bad_prices > 0:
+        logger.warning(
+            "Dropped %d rows with non-numeric avg_price from DB.", bad_prices
+        )
+        df = df.dropna(subset=["avg_price"])
+
+    invalid_prices = (df["avg_price"] <= 0).sum()
+    if invalid_prices > 0:
+        logger.warning(
+            "Dropped %d rows with zero/negative prices from DB.", invalid_prices
+        )
+        df = df[df["avg_price"] > 0]
+
+    if df.empty:
+        raise InvalidCSVError(
+            detail="No valid rows remain in DailyPriceHistory after cleaning."
+        )
+
+    df["commodity"] = df["commodity"].astype(str).str.strip()
+    df = df.sort_values("date").reset_index(drop=True)
+
+    logger.info(
+        "Loaded from DB: %d rows, %d commodities, %s → %s",
+        len(df),
+        df["commodity"].nunique(),
+        df["date"].min().date(),
+        df["date"].max().date(),
+    )
+    return df
+
 
 def load_csv(filepath: str) -> pd.DataFrame:
     """
@@ -102,7 +211,6 @@ def load_csv(filepath: str) -> pd.DataFrame:
         .str.replace("_", " ")
     )
     df = df.rename(columns=_COL_ALIASES)
-    # Re-apply underscore for internal use
     df.columns = df.columns.str.replace(" ", "_")
 
     # Detect date column
@@ -160,6 +268,7 @@ def load_csv(filepath: str) -> pd.DataFrame:
     )
     return df
 
+# Series preparation
 
 def prepare_series(df: pd.DataFrame, commodity: str) -> pd.Series:
     """
@@ -206,6 +315,7 @@ def prepare_series(df: pd.DataFrame, commodity: str) -> pd.Series:
 
     return sub["avg_price"].rename("avg_price")
 
+# Feature engineering
 
 def build_features(series: pd.Series) -> pd.DataFrame:
     """
@@ -309,3 +419,10 @@ def evaluate_metrics(y_true, y_pred) -> dict:
         "rmse": round(rmse, 4),
         "mape": round(mape, 4) if mape is not None else None,
     }
+
+# Internal alias so load_from_db() can use F() without a top-level ORM import
+def _F(field):
+    """Lazy wrapper around django.db.models.F to avoid import at module load."""
+    from django.db.models import F
+
+    return F(field)

@@ -1,11 +1,17 @@
 """
 DRF Views for Kalimati Price Forecasting API (SARIMAX + LightGBM ensemble).
 
-Changes vs original:
-  - _run_forecast(): each forecast step now includes a `confidence` field
+Updated:
+  - _get_dataframe() replaces _latest_csv() + load_csv() everywhere.
+    It queries price_predictor.DailyPriceHistory first (DB-first strategy)
+    and falls back to the most recent uploaded CSV only if the DB is empty
+    or unavailable.
+  - train_commodity() / retrain_all() now receive a pre-loaded DataFrame
+    (df=) so the DB / CSV is not hit a second time inside the pipeline.
+  - MarketAnalysisView._from_db() now reads price_predictor.DailyPriceHistory
+    directly instead of the local PriceRecord model.
+  - _run_forecast(): each forecast step includes a `confidence` field
     derived from the CI width relative to the predicted price.
-  - MarketAnalysisView (new): each commodity in `changes` now includes
-    a `yesterday` field so the frontend header can show yesterday's price.
 """
 
 import logging
@@ -39,10 +45,14 @@ MODELS_DIR = Path(settings.MODELS_DIR)
 DATA_DIR = Path(settings.DATA_DIR)
 
 
-# Helpers 
+# ─────────────────────────────────────────────────────────────────────────────
+# Internal helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 def _slug(commodity: str) -> str:
     return commodity.lower().replace(" ", "_")
+
 
 def _model_paths(commodity: str) -> dict:
     s = _slug(commodity)
@@ -51,6 +61,7 @@ def _model_paths(commodity: str) -> dict:
         "lgbm": MODELS_DIR / f"{s}_lgbm.pkl",
         "weights": MODELS_DIR / f"{s}_weights.pkl",
     }
+
 
 def _assert_models_exist(commodity: str):
     """Raise ModelNotTrainedError if neither model file exists on disk."""
@@ -69,26 +80,55 @@ def _assert_models_exist(commodity: str):
             "LightGBM model missing for '%s'. Will use SARIMAX only.", commodity
         )
 
-def _latest_csv() -> str:
-    """Return path to the most recently uploaded CSV, or raise NoDataError."""
+
+def _get_dataframe():
+    """
+    Return a cleaned price DataFrame.
+
+    Priority:
+        1. price_predictor.DailyPriceHistory (DB-first)
+        2. Most recent uploaded CSV file (fallback)
+
+    Raises:
+        NoDataError — neither DB nor CSV has data.
+    """
+    from .ml.preprocess import load_from_db, load_csv
+
+    # ── Primary: DB ───────────────────────────────────────────────────────
+    try:
+        df = load_from_db()
+        logger.info("_get_dataframe: loaded %d rows from DB.", len(df))
+        return df
+    except Exception as db_err:
+        logger.warning(
+            "_get_dataframe: DB load failed (%s) — falling back to CSV.", db_err
+        )
+
+    # ── Fallback: CSV ─────────────────────────────────────────────────────
     csv_files = sorted(DATA_DIR.glob("*.csv"))
     if not csv_files:
-        raise NoDataError()
-    return str(csv_files[-1])
+        raise NoDataError(
+            detail=(
+                "price_predictor DB is empty and no CSV files found in DATA_DIR. "
+                "Either run the market-price fetch endpoint or upload a CSV via POST /api/upload/."
+            )
+        )
+
+    csv_path = str(csv_files[-1])
+    logger.info("_get_dataframe: loading from CSV: %s", csv_path)
+    return load_csv(csv_path)
+
 
 def _confidence_from_ci(predicted: float, lower: float, upper: float) -> float:
     """
-    Derive a 0-100 confidence score from the CI width relative to predicted price.
+    Derive a 0–100 confidence score from the CI width relative to predicted price.
 
     A narrow CI  → high confidence (close to 95).
     A wide CI    → lower confidence (floor at 40).
 
     Formula:
-        ci_pct  = (upper - lower) / predicted * 100
+        ci_pct     = (upper - lower) / predicted * 100
         confidence = clamp(95 - ci_pct, 40, 95)
-
-    A CI that spans 5 % of the price → confidence 90 %.
-    A CI that spans 55 % of the price → confidence 40 % (floor).
     """
     if predicted <= 0:
         return 70.0
@@ -102,24 +142,22 @@ def _run_forecast(commodity: str, steps: int, model_type: str) -> dict:
 
     model_type: 'sarimax' | 'lgbm' | 'ensemble'
 
-    Each entry in `forecast` now includes:
-        predicted_price, lower_bound, upper_bound, confidence (0-100)
+    Each entry in `forecast` includes:
+        date, predicted_price, lower_bound, upper_bound, confidence (0-100)
     """
     from .ml.sarimax_model import load_sarimax, forecast_sarimax
     from .ml.lgbm_model import load_lgbm, forecast_lightgbm
     from .ml.ensemble import ensemble_with_ci, load_weights, weighted_ensemble
-    from .ml.preprocess import load_csv, prepare_series
+    from .ml.preprocess import prepare_series
+    from datetime import timedelta
 
     _assert_models_exist(commodity)
 
     paths = _model_paths(commodity)
-    csv_path = _latest_csv()
-    df = load_csv(csv_path)
+    df = _get_dataframe()  # DB-first, CSV fallback
     series = prepare_series(df, commodity)
 
     # Build future date labels
-    from datetime import timedelta
-
     last_date = series.index[-1]
     forecast_dates = [
         (last_date + timedelta(days=i + 1)).strftime("%Y-%m-%d") for i in range(steps)
@@ -208,19 +246,12 @@ def _run_forecast(commodity: str, steps: int, model_type: str) -> dict:
     }
 
 # Views
-
 class ForecastView(APIView):
-    """
-    GET /api/forecast/?commodity=Tomato&days=7&model=ensemble
-
-    model options: sarimax | lgbm | ensemble (default)
-    days range:    1–30
-    """
-
     permission_classes = [AllowAny]
 
     def get(self, request):
         serializer = ForecastRequestSerializer(data=request.query_params)
+
         if not serializer.is_valid():
             from rest_framework.exceptions import ValidationError
 
@@ -234,14 +265,31 @@ class ForecastView(APIView):
         logger.info(
             "Forecast request: commodity=%s days=%d model=%s", commodity, days, model
         )
-        result = _run_forecast(commodity, days, model)
-        return Response(result, status=status.HTTP_200_OK)
+
+        try:
+            result = _run_forecast(commodity, days, model)
+
+            return Response(result, status=status.HTTP_200_OK)
+
+        except ModelNotTrainedError:
+            return Response(
+                {"commodity": commodity, "status": "not_trained", "forecast": []},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class UploadCSVView(APIView):
     """
     POST /api/upload/
     Multipart form: file=<your_kalimati.csv>
+
+    Still supported as a manual override / one-off data import.
+    The system will use the DB by default; this CSV is only used as a fallback.
     """
 
     permission_classes = [AllowAny]
@@ -293,6 +341,10 @@ class UploadCSVView(APIView):
                 "commodities_found": len(commodities),
                 "sample_commodities": commodities[:10],
                 "date_range": {"from": str(date_min), "to": str(date_max)},
+                "note": (
+                    "The system uses the price_predictor DB as primary data source. "
+                    "This CSV will be used only as a fallback if the DB is unavailable."
+                ),
                 "next_step": "POST /api/retrain/ to train models.",
             },
             status=status.HTTP_201_CREATED,
@@ -302,8 +354,8 @@ class UploadCSVView(APIView):
 class RetrainView(APIView):
     """
     POST /api/retrain/
-    Body: {"commodity": "Tomato"}   — train one commodity
-    Body: {}                        — retrain all
+    Body: {"commodity": "Tomato"}  — train one commodity
+    Body: {}                       — retrain all
     """
 
     permission_classes = [AllowAny]
@@ -316,13 +368,16 @@ class RetrainView(APIView):
             raise ValidationError(serializer.errors)
 
         commodity = serializer.validated_data.get("commodity", "").strip()
-        csv_path = _latest_csv()
+
+        # Load data once here — pass it into the pipeline to avoid a second
+        # DB / CSV hit inside train_commodity / retrain_all.
+        df = _get_dataframe()
 
         from .ml.train_pipeline import train_commodity, retrain_all
 
         if commodity:
             logger.info("Retrain requested for: %s", commodity)
-            result = train_commodity(commodity, csv_path, MODELS_DIR)
+            result = train_commodity(commodity, MODELS_DIR, df=df)
             self._persist_metrics(commodity, result.get("metrics", {}))
             return Response(
                 {
@@ -334,7 +389,7 @@ class RetrainView(APIView):
             )
         else:
             logger.info("Full retrain requested for all commodities.")
-            results = retrain_all(csv_path, MODELS_DIR)
+            results = retrain_all(MODELS_DIR, df=df)
             for comm, res in results.items():
                 if res.get("status") == "success":
                     self._persist_metrics(comm, res.get("metrics", {}))
@@ -368,6 +423,7 @@ class RetrainView(APIView):
                     },
                 )
 
+
 class CommoditiesView(APIView):
     """
     GET /api/commodities/
@@ -383,6 +439,7 @@ class CommoditiesView(APIView):
             trained.add(name)
 
         return Response({"count": len(trained), "commodities": sorted(trained)})
+
 
 class MetricsView(APIView):
     """
@@ -401,10 +458,11 @@ class MetricsView(APIView):
                 raise ModelNotTrainedError(commodity)
         return Response(ModelMetricSerializer(qs, many=True).data)
 
+
 class HistoryView(APIView):
     """
     GET /api/history/<commodity>/?days=30
-    Returns the last N days of actual recorded prices.
+    Returns the last N days of actual recorded prices (from DB or CSV).
     """
 
     permission_classes = [AllowAny]
@@ -420,11 +478,9 @@ class HistoryView(APIView):
 
             raise ValidationError({"days": "Must be an integer between 1 and 730."})
 
-        csv_path = _latest_csv()
+        from .ml.preprocess import prepare_series
 
-        from .ml.preprocess import load_csv, prepare_series
-
-        df = load_csv(csv_path)
+        df = _get_dataframe()  # DB-first, CSV fallback
         series = prepare_series(df, commodity)
         recent = series.tail(days)
 
@@ -440,25 +496,31 @@ class HistoryView(APIView):
             }
         )
 
+
 class MarketAnalysisView(APIView):
     """
     GET /api/market-analysis/
 
-    Returns today's Kalimati prices alongside yesterday's prices,
-    so the frontend predictor header can show the change correctly.
+    Returns today's Kalimati prices alongside yesterday's prices so the
+    frontend can show the price change correctly.
 
+    Primary: queries price_predictor.DailyPriceHistory directly.
+    Fallback: reads from the most recently uploaded CSV.
     """
 
     permission_classes = [AllowAny]
 
     def get(self, request):
-        # Try DB-first (PriceRecord model) 
+        # Primary: price_predictor DB 
         try:
-            return self._from_db()
+            return self._from_price_predictor_db()
         except Exception as e:
-            logger.warning("DB market analysis failed (%s), falling back to CSV.", e)
+            logger.warning(
+                "price_predictor DB market analysis failed (%s), falling back to CSV.",
+                e,
+            )
 
-        # Fall back to CSV 
+        # Fallback: CSV 
         try:
             return self._from_csv()
         except Exception as e:
@@ -470,59 +532,64 @@ class MarketAnalysisView(APIView):
                 http_status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    # DB implementation 
-    def _from_db(self):
-        from .models import PriceRecord
+    # DB implementation (price_predictor.DailyPriceHistory)
+    def _from_price_predictor_db(self):
+        from price_predictor.models import DailyPriceHistory
         from django.db.models import Max
 
-        latest_date = PriceRecord.objects.aggregate(d=Max("date"))["d"]
+        latest_date = DailyPriceHistory.objects.aggregate(d=Max("date"))["d"]
         if not latest_date:
-            raise ValueError("No PriceRecord rows in DB.")
+            raise ValueError("No DailyPriceHistory rows in price_predictor DB.")
 
-        today_qs = PriceRecord.objects.filter(date=latest_date)
+        today_qs = DailyPriceHistory.objects.filter(date=latest_date).select_related(
+            "product"
+        )
 
         # Previous trading day (may not be exactly yesterday if data is sparse)
-        prev_date = PriceRecord.objects.filter(date__lt=latest_date).aggregate(
+        prev_date = DailyPriceHistory.objects.filter(date__lt=latest_date).aggregate(
             d=Max("date")
         )["d"]
+
         prev_lookup = {}
         if prev_date:
-            for rec in PriceRecord.objects.filter(date=prev_date):
-                prev_lookup[rec.commodity] = rec.avg_price
+            for rec in DailyPriceHistory.objects.filter(date=prev_date).select_related(
+                "product"
+            ):
+                prev_lookup[rec.product.commodityname] = rec.avg_price
 
         changes = []
         for rec in today_qs:
-            yesterday_price = prev_lookup.get(rec.commodity)
+            name = rec.product.commodityname
+            yesterday_price = prev_lookup.get(name)
             change_pct = 0.0
             trend = "stable"
+
             if yesterday_price and yesterday_price > 0:
                 change_pct = round(
                     (rec.avg_price - yesterday_price) / yesterday_price * 100, 2
                 )
                 trend = (
-                    "up" if change_pct > 0 else ("down" if change_pct < 0 else "stable")
+                    "up" if change_pct > 0 else "down" if change_pct < 0 else "stable"
                 )
 
             changes.append(
                 {
-                    "commodity": rec.commodity,
+                    "commodity": name,
                     "today": rec.avg_price,
-                    "yesterday": yesterday_price,  
+                    "yesterday": yesterday_price,
                     "change_percentage": change_pct,
                     "trend": trend,
-                    "unit": rec.unit,
+                    "unit": rec.product.commodityunit or "kg",
                 }
             )
 
-        # Overall market trend from majority direction
         up_count = sum(1 for c in changes if c["trend"] == "up")
         down_count = sum(1 for c in changes if c["trend"] == "down")
-        if up_count > down_count:
-            market_trend = "Bullish"
-        elif down_count > up_count:
-            market_trend = "Bearish"
-        else:
-            market_trend = "Neutral"
+        market_trend = (
+            "Bullish"
+            if up_count > down_count
+            else "Bearish" if down_count > up_count else "Neutral"
+        )
 
         return Response(
             {
@@ -532,13 +599,15 @@ class MarketAnalysisView(APIView):
             }
         )
 
-    # CSV fallback implementation 
+    # CSV fallback implementation
     def _from_csv(self):
         from .ml.preprocess import load_csv
 
-        csv_path = _latest_csv()
-        df = load_csv(csv_path)
+        csv_files = sorted(DATA_DIR.glob("*.csv"))
+        if not csv_files:
+            raise NoDataError()
 
+        df = load_csv(str(csv_files[-1]))
         dates = sorted(df["date"].unique())
         latest_date = dates[-1]
         prev_date = dates[-2] if len(dates) >= 2 else None
@@ -556,19 +625,20 @@ class MarketAnalysisView(APIView):
             yesterday_price = prev_lookup.get(row["commodity"])
             change_pct = 0.0
             trend = "stable"
+
             if yesterday_price and yesterday_price > 0:
                 change_pct = round(
                     (row["avg_price"] - yesterday_price) / yesterday_price * 100, 2
                 )
                 trend = (
-                    "up" if change_pct > 0 else ("down" if change_pct < 0 else "stable")
+                    "up" if change_pct > 0 else "down" if change_pct < 0 else "stable"
                 )
 
             changes.append(
                 {
                     "commodity": row["commodity"],
                     "today": row["avg_price"],
-                    "yesterday": yesterday_price,  
+                    "yesterday": yesterday_price,
                     "change_percentage": change_pct,
                     "trend": trend,
                     "unit": "kg",
@@ -577,12 +647,11 @@ class MarketAnalysisView(APIView):
 
         up_count = sum(1 for c in changes if c["trend"] == "up")
         down_count = sum(1 for c in changes if c["trend"] == "down")
-        if up_count > down_count:
-            market_trend = "Bullish"
-        elif down_count > up_count:
-            market_trend = "Bearish"
-        else:
-            market_trend = "Neutral"
+        market_trend = (
+            "Bullish"
+            if up_count > down_count
+            else "Bearish" if down_count > up_count else "Neutral"
+        )
 
         return Response(
             {
