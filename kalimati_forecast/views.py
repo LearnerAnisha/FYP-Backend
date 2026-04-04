@@ -121,19 +121,27 @@ def _get_dataframe():
 
 def _confidence_from_ci(predicted: float, lower: float, upper: float) -> float:
     """
-    Derive a 0–100 confidence score from the CI width relative to predicted price.
+    Confidence score calibrated for agricultural price data.
 
-    A narrow CI  → high confidence (close to 95).
-    A wide CI    → lower confidence (floor at 40).
-
-    Formula:
-        ci_pct     = (upper - lower) / predicted * 100
-        confidence = clamp(95 - ci_pct, 40, 95)
+    Reference points:
+      CI width =  5% of price  → ~92% confidence  (excellent)
+      CI width = 15% of price  → ~78% confidence  (good)
+      CI width = 25% of price  → ~65% confidence  (acceptable)
+      CI width = 40% of price  → ~50% confidence  (wide)
+      CI width = 60%+ of price → ~40% confidence  (floor)
     """
     if predicted <= 0:
         return 70.0
     ci_pct = (upper - lower) / predicted * 100
-    return round(max(40.0, min(95.0, 95.0 - ci_pct)), 1)
+
+    # Sigmoid-style mapping: full confidence at 5%, floor at 60%
+    # confidence = 92 - (87 * (ci_pct - 5) / 55) clamped to [40, 92]
+    if ci_pct <= 5:
+        return 92.0
+    if ci_pct >= 60:
+        return 40.0
+    confidence = 92.0 - (52.0 * (ci_pct - 5.0) / 55.0)
+    return round(max(40.0, min(92.0, confidence)), 1)
 
 
 def _run_forecast(commodity: str, steps: int, model_type: str) -> dict:

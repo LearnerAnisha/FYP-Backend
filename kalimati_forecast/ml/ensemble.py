@@ -119,24 +119,6 @@ def ensemble_with_ci(
     lgbm_preds: list,
     weights: dict = None,
 ) -> dict:
-    """
-    Build ensemble predictions with a combined confidence interval.
-
-    The CI uses SARIMAX's interval as a base and widens it by the
-    model disagreement (std of both predictions at each step).
-
-    Args:
-        sarimax_result: Dict with 'predictions', 'lower', 'upper'.
-        lgbm_preds:     LightGBM point predictions.
-        weights:        Ensemble weights dict.
-
-    Returns:
-        {
-            'predictions': [...],
-            'lower':       [...],
-            'upper':       [...],
-        }
-    """
     preds = weighted_ensemble(
         sarimax_result["predictions"],
         lgbm_preds,
@@ -147,19 +129,23 @@ def ensemble_with_ci(
     upper_list = sarimax_result.get("upper", sarimax_result["predictions"])
 
     lower, upper = [], []
+    steps = len(preds)
+
     for i, p in enumerate(preds):
         s_pred = float(sarimax_result["predictions"][i])
         l_pred = float(lgbm_preds[i])
 
-        # Width of SARIMAX CI
-        ci_spread_lo = s_pred - float(lower_list[i])
-        ci_spread_hi = float(upper_list[i]) - s_pred
+        # Base CI half-width from SARIMAX — cap at 15% of predicted price
+        ci_half_lo = min(s_pred - float(lower_list[i]), p * 0.15)
+        ci_half_hi = min(float(upper_list[i]) - s_pred, p * 0.15)
 
-        # Extra uncertainty = disagreement between models
-        disagreement = abs(s_pred - l_pred) * 0.5
+        # Disagreement contribution decays over forecast horizon
+        # Step 1 = full disagreement, step 7 = 40% of disagreement
+        decay = max(0.4, 1.0 - (i / steps) * 0.6)
+        disagreement = abs(s_pred - l_pred) * 0.25 * decay
 
-        lower.append(round(max(0.0, p - ci_spread_lo - disagreement), 2))
-        upper.append(round(p + ci_spread_hi + disagreement, 2))
+        lower.append(round(max(0.0, p - ci_half_lo - disagreement), 2))
+        upper.append(round(p + ci_half_hi + disagreement, 2))
 
     return {
         "predictions": preds,
