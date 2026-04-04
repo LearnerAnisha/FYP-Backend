@@ -17,7 +17,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
 from datetime import timedelta
-import random
+import secrets 
 
 class UserManager(BaseUserManager):
     """
@@ -142,10 +142,9 @@ class EmailOTP(models.Model):
 
 def generate_otp():
     """
-    Generates a cryptographically random 6-digit OTP.
-
-    Returns:
-        str: A 6-digit numeric OTP.
+    Generates a cryptographically secure 6-digit OTP.
+    Uses secrets.randbelow() which draws from OS-level entropy (urandom).
     """
-    return str(random.randint(100000, 999999))
-
+    # secrets.randbelow(n) returns a random int in [0, n)
+    # We shift by 100000 to ensure always 6 digits (100000–999999)
+    return str(secrets.randbelow(900000) + 100000)

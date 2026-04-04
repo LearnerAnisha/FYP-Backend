@@ -308,13 +308,13 @@ class PaymentStatusView(APIView):
     Response:
         { "payment": { id, status, esewa_ref_id, total_amount, ... } }
     """
-
-    permission_classes = [AllowAny]
-
+    
     def get(self, request, payment_id):
         try:
-            payment = Payment.objects.get(pk=payment_id)
+            # Scope lookup to the authenticated user — prevents IDOR
+            payment = Payment.objects.get(pk=payment_id, user=request.user)
         except Payment.DoesNotExist:
+            # Return 404 (not 403) to avoid leaking whether the payment exists
             raise PaymentNotFoundError(
                 message=f"Payment with ID {payment_id} does not exist."
             )
@@ -322,7 +322,7 @@ class PaymentStatusView(APIView):
         return Response(
             {"payment": PaymentSerializer(payment).data},
             status=status.HTTP_200_OK,
-        )
+        )    
 
 
 # 5. PAYMENT LIST
@@ -337,10 +337,9 @@ class PaymentListView(APIView):
         { "count": 5, "payments": [ ... ] }
     """
 
-    permission_classes = [AllowAny]
-
     def get(self, request):
-        payments = Payment.objects.all()
+        # Filter to only the logged-in user's payments
+        payments = Payment.objects.filter(user=request.user).order_by("-created_at")
         serializer = PaymentSerializer(payments, many=True)
         return Response(
             {

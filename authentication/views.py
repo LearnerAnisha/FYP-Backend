@@ -16,6 +16,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, EmailOTP, generate_otp
 from .serializers import ProfileSerializer, RegisterSerializer, LoginSerializer
 from .email import send_otp_email
+from .throttles import OTPVerifyThrottle, LoginThrottle
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import RetrieveUpdateAPIView
@@ -67,7 +68,8 @@ class VerifyOTPView(APIView):
     """
 
     permission_classes = [AllowAny]
-
+    throttle_classes = [OTPVerifyThrottle]
+    
     def post(self, request):
         email = request.data.get("email")
         otp_input = request.data.get("otp")
@@ -110,6 +112,7 @@ class LoginView(generics.GenericAPIView):
 
     serializer_class = LoginSerializer
     permission_classes = [AllowAny]
+    throttle_classes = [OTPVerifyThrottle]
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)

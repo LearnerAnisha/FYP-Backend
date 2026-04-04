@@ -71,7 +71,13 @@ REST_FRAMEWORK = {
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
-    ]
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/day",
+        "user": "1000/day",
+        "otp_verify": "5/hour",     # ← Max 5 OTP attempts per hour per IP
+        "login": "10/hour",          # ← Max 10 login attempts per hour
+    },  
 }
 
 MIDDLEWARE = [
@@ -118,7 +124,8 @@ DATABASES = {
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = os.getenv("DEBUG") == "1"
-ALLOWED_HOSTS = ["*"]
+_allowed = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1")
+ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 
 
 # Password validation
@@ -177,16 +184,36 @@ SWAGGER_SETTINGS = {
     "LOGOUT_URL": None,
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
 
-CORS_ALLOW_HEADERS = ['*']
-CORS_ALLOW_METHODS = ['*']
+CORS_ALLOW_CREDENTIALS = True
+
+# Explicitly list only what your frontend actually uses
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
 
 # settings for azure
 AZURE_EMAIL_CONNECTION_STRING = os.getenv("AZURE_EMAIL_CONNECTION_STRING")
@@ -223,10 +250,10 @@ OLLAMA_VISION_MODEL = "llava"
 # ESEWA CONFIGURATION 
 FRONTEND_URL = "http://localhost:5173"
 
-ESEWA_SECRET_KEY = config("ESEWA_SECRET_KEY", default="8gBm/:&EnhH.1/q")
-ESEWA_PRODUCT_CODE = config("ESEWA_PRODUCT_CODE", default="EPAYTEST")
-ESEWA_BASE_URL = config("ESEWA_BASE_URL", default="https://rc-epay.esewa.com.np")
-DOMAIN = config("DOMAIN", default="http://localhost:8000")
+ESEWA_SECRET_KEY = config("ESEWA_SECRET_KEY")
+ESEWA_PRODUCT_CODE = config("ESEWA_PRODUCT_CODE")
+ESEWA_BASE_URL = config("ESEWA_BASE_URL")
+DOMAIN = config("DOMAIN")
 
 # Directory where trained model .pkl files are saved
 MODELS_DIR = BASE_DIR / 'kalimati_forecast' / 'models_ml'
