@@ -16,7 +16,6 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, EmailOTP, generate_otp
 from .serializers import ProfileSerializer, RegisterSerializer, LoginSerializer
 from .email import send_otp_email
-from .throttles import OTPVerifyThrottle, LoginThrottle
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import RetrieveUpdateAPIView
@@ -43,21 +42,28 @@ class RegisterView(generics.CreateAPIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-
         user = serializer.save(is_verified=False)
-
         otp_code = generate_otp()
-        EmailOTP.objects.update_or_create(
-            user=user,
-            defaults={"code": otp_code}
-        )
+        EmailOTP.objects.update_or_create(user=user, defaults={"code": otp_code})
 
-        send_otp_email(user, otp_code)
+        try:
+            send_otp_email(user, otp_code)
+        except Exception as e:
+            # User and OTP are saved — they can resend. Don't 500.
+            return Response(
+                {
+                    "status": "success",
+                    "message": "Account created but email delivery failed. Use resend OTP.",
+                    "email": user.email,
+                },
+                status=status.HTTP_201_CREATED
+            )
 
         return Response(
             {
                 "status": "success",
-                "message": "Registration successful. OTP sent to your email."
+                "message": "Registration successful. OTP sent to your email.",
+                "email": user.email,
             },
             status=status.HTTP_201_CREATED
         )
@@ -68,8 +74,7 @@ class VerifyOTPView(APIView):
     """
 
     permission_classes = [AllowAny]
-    throttle_classes = [OTPVerifyThrottle]
-    
+
     def post(self, request):
         email = request.data.get("email")
         otp_input = request.data.get("otp")
@@ -112,7 +117,6 @@ class LoginView(generics.GenericAPIView):
 
     serializer_class = LoginSerializer
     permission_classes = [AllowAny]
-    throttle_classes = [LoginThrottle]
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -227,3 +231,54 @@ class DeleteAccountView(APIView):
             {"message": "Account deleted successfully"},
             status=204
         )
+
+# Resend OTP
+class ResendOTPView(APIView):
+    """
+    Resends a fresh OTP to the user's email.
+    Only works for unverified accounts.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+
+        if not email:
+            return Response(
+                {"message": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"message": "No account found with this email."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if user.is_verified:
+            return Response(
+                {"message": "This account is already verified."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp_code = generate_otp()
+        EmailOTP.objects.update_or_create(
+            user=user,
+            defaults={"code": otp_code}
+        )
+
+        try:
+            send_otp_email(user, otp_code)
+        except Exception:
+            return Response(
+                {"message": "Failed to send email. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response(
+            {"message": "A new OTP has been sent to your email."},
+            status=status.HTTP_200_OK
+        )
+        

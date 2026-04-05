@@ -89,15 +89,21 @@ class RegisterSerializer(serializers.ModelSerializer):
         """
         Prevent duplicate email and phone numbers.
         """
-        if User.objects.filter(email=data["email"]).exists():
-            raise serializers.ValidationError(
-                {"email": "An account with this email already exists."}
-            )
+        existing_email = User.objects.filter(email=data["email"]).first()
+        if existing_email:
+            if existing_email.is_verified:
+                raise serializers.ValidationError(
+                    {"email": "An account with this email already exists."}
+                )
+            existing_email.delete()  # unverified — wipe and allow re-registration
 
-        if User.objects.filter(phone=data["phone"]).exists():
-            raise serializers.ValidationError(
-                {"phone": "An account with this phone number already exists."}
-            )
+        existing_phone = User.objects.filter(phone=data["phone"]).first()
+        if existing_phone:
+            if existing_phone.is_verified:
+                raise serializers.ValidationError(
+                    {"phone": "An account with this phone number already exists."}
+                )
+            existing_phone.delete()
 
         return data
 
