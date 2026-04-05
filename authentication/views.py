@@ -112,7 +112,7 @@ class LoginView(generics.GenericAPIView):
 
     serializer_class = LoginSerializer
     permission_classes = [AllowAny]
-    throttle_classes = [OTPVerifyThrottle]
+    throttle_classes = [LoginThrottle]
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
