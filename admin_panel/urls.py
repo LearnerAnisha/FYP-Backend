@@ -45,11 +45,12 @@ urlpatterns = [
     # AUTHENTICATION & DASHBOARD
     path("login/", AdminLoginView.as_view(), name="admin-login"),
     path("dashboard/stats/", AdminDashboardStatsView.as_view(), name="dashboard-stats"),
+    
     # USER MANAGEMENT
     path("users/", AdminUserListView.as_view(), name="users-list"),
     path(
         "users/create/", AdminCreateUserView.as_view(), name="create-user"
-    ),  # ADD THIS
+    ),
     path("users/<int:id>/", AdminUserDetailView.as_view(), name="user-detail"),
     path(
         "users/<int:id>/toggle-status/",
@@ -57,8 +58,10 @@ urlpatterns = [
         name="toggle-status",
     ),
     path("users/<int:id>/verify/", AdminVerifyUserView.as_view(), name="verify-user"),
+    
     # ACTIVITY LOGS
     path("activity-logs/", AdminActivityLogListView.as_view(), name="activity-logs"),
+    
     # CHATBOT
     path(
         "chat-conversations/",
@@ -75,6 +78,7 @@ urlpatterns = [
         "crop-suggestions/", CropSuggestionListView.as_view(), name="crop-suggestions"
     ),
     path("weather-data/", WeatherDataListView.as_view(), name="weather-data"),
+    
     # CROP DISEASE DETECTION
     path("scan-results/", ScanResultListView.as_view(), name="scan-results"),
     path(
@@ -82,6 +86,7 @@ urlpatterns = [
         ScanResultDetailView.as_view(),
         name="scan-result-detail",
     ),
+    
     # PRICE PREDICTOR (ADMIN)
     path("products/", AdminMasterProductListView.as_view(), name="admin-products"),
     path(
@@ -102,6 +107,7 @@ urlpatterns = [
     ),
     path("fetch/", AdminFetchMarketPricesView.as_view(), name="admin-price-fetch"),
     path("price-stats/", AdminPriceStatsView.as_view(), name="admin-price-stats"),
+    
     # SUBSCRIPTION
     path("subscriptions/", AdminSubscriptionListView.as_view(), name="subscriptions"),
     path(

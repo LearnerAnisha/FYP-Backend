@@ -45,7 +45,6 @@ from .serializers import (
     AdminMasterProductSerializer,
     AdminDailyPriceHistorySerializer,
 )
-
 from .permissions import IsAdminUser
 from .utils import log_admin_action
 
@@ -113,7 +112,6 @@ class AdminLoginView(generics.GenericAPIView):
             status=status.HTTP_200_OK,
         )
 
-
 # DASHBOARD
 class AdminDashboardStatsView(APIView):
     """
@@ -148,6 +146,13 @@ class AdminDashboardStatsView(APIView):
         # Disease scan statistics
         total_scans = ScanResult.objects.count()
 
+        # ADD THIS BLOCK — weekly trend for the area chart
+        weekly_trend = []
+        for i in range(6, -1, -1):
+            day = today - timedelta(days=i)
+            count = User.objects.filter(date_joined__date=day).count()
+            weekly_trend.append({"day": day.strftime("%a"), "users": count})
+
         return Response(
             {
                 "overview": {
@@ -176,12 +181,13 @@ class AdminDashboardStatsView(APIView):
                     "active": Subscription.objects.filter(is_active=True).count(),
                     "inactive": Subscription.objects.filter(is_active=False).count(),
                 },
+                # ADD THIS KEY to the response dict
+                "weekly_trend": weekly_trend,
             }
         )
 
 
 # USER MANAGEMENT
-
 
 # Add this new view for creating users
 class AdminCreateUserView(generics.CreateAPIView):
@@ -252,7 +258,6 @@ class AdminCreateUserView(generics.CreateAPIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
 class AdminUserListView(generics.ListAPIView):
     """
     List all users with search and filtering.
@@ -295,7 +300,6 @@ class AdminUserListView(generics.ListAPIView):
 
         return queryset
 
-
 class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     Retrieve, update, or delete a specific user.
@@ -325,7 +329,6 @@ class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
             request=self.request,
         )
         instance.delete()
-
 
 class AdminToggleUserStatusView(APIView):
     """
@@ -368,7 +371,6 @@ class AdminToggleUserStatusView(APIView):
             }
         )
 
-
 class AdminVerifyUserView(APIView):
     """
     Manually verify a user's email.
@@ -405,9 +407,7 @@ class AdminVerifyUserView(APIView):
             {"message": "User verified successfully.", "is_verified": user.is_verified}
         )
 
-
 #  CHATBOT MANAGEMENT
-
 
 class ChatConversationListView(generics.ListAPIView):
     serializer_class = ChatConversationListSerializer
@@ -432,7 +432,6 @@ class ChatConversationListView(generics.ListAPIView):
 
         return queryset.order_by("-updated_at")
 
-
 class ChatConversationDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = ChatConversation.objects.all()
     serializer_class = ChatConversationDetailSerializer
@@ -447,7 +446,6 @@ class ChatConversationDetailView(generics.RetrieveUpdateDestroyAPIView):
             request=self.request,
         )
         instance.delete()
-
 
 class ChatMessageListView(generics.ListAPIView):
     serializer_class = ChatMessageSerializer
@@ -467,7 +465,6 @@ class ChatMessageListView(generics.ListAPIView):
 
         return queryset.order_by("-timestamp")
 
-
 class CropSuggestionListView(generics.ListAPIView):
     serializer_class = CropSuggestionSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -486,7 +483,6 @@ class CropSuggestionListView(generics.ListAPIView):
 
         return queryset.order_by("-created_at")
 
-
 class WeatherDataListView(generics.ListAPIView):
     serializer_class = WeatherDataSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -503,7 +499,6 @@ class WeatherDataListView(generics.ListAPIView):
 
 
 # CROP DISEASE DETECTION
-
 
 class ScanResultListView(generics.ListAPIView):
     serializer_class = ScanResultListSerializer
@@ -539,7 +534,6 @@ class ScanResultDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 # ACTIVITY LOGS
 
-
 class AdminActivityLogListView(generics.ListAPIView):
     """
     List all admin activity logs.
@@ -574,7 +568,6 @@ class AdminActivityLogListView(generics.ListAPIView):
 
 # PRICE PREDICTOR MANAGEMENT
 
-
 class AdminMasterProductListView(generics.ListAPIView):
     """
     Admin view: list latest commodity prices with search and filters.
@@ -600,7 +593,6 @@ class AdminMasterProductListView(generics.ListAPIView):
     ordering = ["commodityname"]  # default ordering
 
     queryset = MasterProduct.objects.all()
-
 
 class AdminMasterProductDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
@@ -630,7 +622,6 @@ class AdminMasterProductDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
         instance.delete()
 
-
 class AdminDailyPriceHistoryListView(generics.ListAPIView):
     """
     Admin view: daily historical price records with search and filters.
@@ -649,7 +640,6 @@ class AdminDailyPriceHistoryListView(generics.ListAPIView):
     ordering = ["-date"]  # default ordering (newest first)
 
     queryset = DailyPriceHistory.objects.select_related("product").all()
-
 
 class AdminDailyPriceHistoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
@@ -679,7 +669,6 @@ class AdminDailyPriceHistoryDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
         instance.delete()
 
-
 class AdminMarketPriceAnalysisView(MarketPriceAnalysisAPIView):
     """
     Admin view: market trend analysis.
@@ -703,9 +692,7 @@ class AdminPriceStatsView(PriceStatsAPIView):
 
     permission_classes = [IsAuthenticated, IsAdminUser]
 
-
 # SUBSCRIPTION MANAGEMENT
-
 
 class AdminSubscriptionListView(generics.ListAPIView):
     """
@@ -735,7 +722,6 @@ class AdminSubscriptionListView(generics.ListAPIView):
             qs = qs.filter(is_active=is_active.lower() == "true")
 
         return qs.order_by("-created_at")
-
 
 class AdminSubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
     """

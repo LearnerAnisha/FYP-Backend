@@ -26,7 +26,6 @@ class AdminFarmerProfileSerializer(serializers.ModelSerializer):
             "bio",
         ]
 
-
 class AdminUserListSerializer(serializers.ModelSerializer):
     """
     Lightweight serializer for user listing.
@@ -167,13 +166,11 @@ class AdminUserDetailSerializer(serializers.ModelSerializer):
 
 #  CHATBOT SERIALIZERS
 
-
 class ChatMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatMessage
         fields = ["id", "conversation", "role", "content", "timestamp"]
         read_only_fields = ["timestamp"]
-
 
 class ChatConversationListSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(
@@ -208,7 +205,6 @@ class ChatConversationListSerializer(serializers.ModelSerializer):
             return {"content": last_msg.content[:100], "timestamp": last_msg.timestamp}
         return None
 
-
 class ChatConversationDetailSerializer(serializers.ModelSerializer):
     messages = ChatMessageSerializer(many=True, read_only=True)
     user_name = serializers.CharField(
@@ -230,7 +226,6 @@ class ChatConversationDetailSerializer(serializers.ModelSerializer):
             "updated_at",
             "messages",
         ]
-
 
 class CropSuggestionSerializer(serializers.ModelSerializer):
     conversation_session_id = serializers.CharField(
@@ -257,7 +252,6 @@ class CropSuggestionSerializer(serializers.ModelSerializer):
             return obj.conversation.user.email
         return None
 
-
 class WeatherDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = WeatherData
@@ -265,7 +259,6 @@ class WeatherDataSerializer(serializers.ModelSerializer):
 
 
 # CROP DISEASE SERIALIZERS
-
 
 class ScanResultListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -307,7 +300,6 @@ class ScanResultDetailSerializer(serializers.ModelSerializer):
 
 # ADMIN ACTIVITY LOG SERIALIZERS
 
-
 class AdminActivityLogSerializer(serializers.ModelSerializer):
     admin_user_name = serializers.CharField(
         source="admin_user.full_name", read_only=True, allow_null=True
@@ -343,7 +335,6 @@ class AdminActivityLogSerializer(serializers.ModelSerializer):
 
 # PRICE PREDICTOR SERIALIZERS
 
-
 class AdminMasterProductSerializer(serializers.ModelSerializer):
     """Admin serializer for MasterProduct with full CRUD support."""
 
@@ -374,7 +365,6 @@ class AdminDailyPriceHistorySerializer(serializers.ModelSerializer):
 
 
 # SUBSCRIPTION SERIALIZERS
-
 class AdminSubscriptionSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source="user.email", read_only=True)
     user_name = serializers.CharField(source="user.full_name", read_only=True)
