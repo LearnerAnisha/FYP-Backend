@@ -297,7 +297,17 @@ class ScanResultDetailSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.image.url)
         return None
 
-
+class ScanResultSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ScanResult
+        fields = [
+            "id", "image", "crop_type", "disease",
+            "confidence", "is_healthy", "severity",
+            "description", "treatment", "prevention",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+        
 # ADMIN ACTIVITY LOG SERIALIZERS
 
 class AdminActivityLogSerializer(serializers.ModelSerializer):

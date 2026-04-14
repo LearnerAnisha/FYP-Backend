@@ -102,6 +102,19 @@ class DiseaseDetectionAPIView(APIView):
             "treatment": info["treatment"],
             "prevention": info["prevention"],
         }
+        
+        SEVERITY_MAP = {
+            "severe": "high",
+            "high": "high",
+            "moderate": "medium",
+            "medium": "medium",
+            "mild": "low",
+            "low": "low",
+            "none": "low",
+        }
+
+        raw_severity = info.get("severity", "low")
+        normalized_severity = SEVERITY_MAP.get(raw_severity.lower(), "low")
 
         # Step 5: Persist
         image.seek(0)
@@ -110,7 +123,11 @@ class DiseaseDetectionAPIView(APIView):
             crop_type=prediction["crop_type"],
             disease=prediction["disease"],
             confidence=prediction["confidence"],
-            severity=info["severity"],
+            is_healthy=prediction["is_healthy"],
+            severity=normalized_severity, 
+            description=info.get("description", ""),
+            treatment=info.get("treatment", ""),
+            prevention=info.get("prevention", ""),
         )
 
         return Response(result, status=status.HTTP_200_OK)

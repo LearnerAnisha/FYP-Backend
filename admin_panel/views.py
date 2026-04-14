@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import viewsets, filters
 from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
@@ -34,6 +35,7 @@ from .serializers import (
     ScanResultListSerializer,
     ScanResultDetailSerializer,
     AdminSubscriptionSerializer,
+    ScanResultSerializer,
 )
 from price_predictor.models import MasterProduct, DailyPriceHistory
 from price_predictor.views import (
@@ -531,7 +533,14 @@ class ScanResultDetailView(generics.RetrieveUpdateDestroyAPIView):
         context["request"] = self.request
         return context
 
-
+class ScanResultViewSet(viewsets.ModelViewSet):
+    queryset = ScanResult.objects.order_by("-created_at")
+    serializer_class = ScanResultSerializer
+    permission_classes = [IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ["severity"]
+    search_fields = ["crop_type", "disease"]
+    
 # ACTIVITY LOGS
 
 class AdminActivityLogListView(generics.ListAPIView):
