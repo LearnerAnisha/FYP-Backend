@@ -7,29 +7,36 @@ from .models import ScanResult
 from .ml_model import is_plant, predict_disease
 from .disease_info import get_disease_info
 
-# Supported crops extracted from class_names.json
 SUPPORTED_CROPS = [
-    "Apple", "Blueberry", "Cherry (including sour)", "Corn (maize)",
-    "Grape", "Orange", "Peach", "Bell Pepper",
-    "Potato", "Raspberry", "Soybean", "Squash",
-    "Strawberry", "Tomato",
+    "Apple",
+    "Blueberry",
+    "Cherry (including sour)",
+    "Corn (maize)",
+    "Grape",
+    "Orange",
+    "Peach",
+    "Bell Pepper",
+    "Potato",
+    "Raspberry",
+    "Soybean",
+    "Squash",
+    "Strawberry",
+    "Tomato",
 ]
 
-# If the model's top confidence is below this, treat as unsupported crop
 CONFIDENCE_THRESHOLD = 60.0
 
+SEVERITY_MAP = {
+    "severe": "high",
+    "high": "high",
+    "moderate": "medium",
+    "medium": "medium",
+    "mild": "low",
+    "low": "low",
+    "none": "low",
+}
+
 class DiseaseDetectionAPIView(APIView):
-    """
-    POST /api/disease/detect/
-
-    Pipeline:
-      1. Validate image present
-      2. Plant gate        → 422 "not_a_plant"
-      3. Confidence gate   → 422 "unsupported_crop"
-      4. Enrich with static knowledge
-      5. Persist + return JSON
-    """
-
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -41,7 +48,6 @@ class DiseaseDetectionAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Step 1: Plant vs Non-plant
         try:
             plant_detected, plant_confidence = is_plant(image)
         except Exception as exc:
@@ -63,7 +69,6 @@ class DiseaseDetectionAPIView(APIView):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
-        # Step 2: Disease detection 
         image.seek(0)
 
         try:
@@ -74,7 +79,6 @@ class DiseaseDetectionAPIView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Step 3: Confidence / supported-crop gate 
         if prediction["confidence"] < CONFIDENCE_THRESHOLD:
             return Response(
                 {
@@ -89,8 +93,10 @@ class DiseaseDetectionAPIView(APIView):
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
-        # Step 4: Enrich
         info = get_disease_info(prediction["raw_label"])
+
+        treatment_list = info.get("treatment", [])
+        prevention_list = info.get("prevention", [])
 
         result = {
             "cropType": prediction["crop_type"],
@@ -99,24 +105,14 @@ class DiseaseDetectionAPIView(APIView):
             "isHealthy": prediction["is_healthy"],
             "severity": info["severity"],
             "description": info["description"],
-            "treatment": info["treatment"],
-            "prevention": info["prevention"],
-        }
-        
-        SEVERITY_MAP = {
-            "severe": "high",
-            "high": "high",
-            "moderate": "medium",
-            "medium": "medium",
-            "mild": "low",
-            "low": "low",
-            "none": "low",
+            "treatment": treatment_list,  
+            "prevention": prevention_list,  
         }
 
-        raw_severity = info.get("severity", "low")
-        normalized_severity = SEVERITY_MAP.get(raw_severity.lower(), "low")
+        normalized_severity = SEVERITY_MAP.get(
+            info.get("severity", "low").lower(), "low"
+        )
 
-        # Step 5: Persist
         image.seek(0)
         ScanResult.objects.create(
             image=image,
@@ -124,20 +120,19 @@ class DiseaseDetectionAPIView(APIView):
             disease=prediction["disease"],
             confidence=prediction["confidence"],
             is_healthy=prediction["is_healthy"],
-            severity=normalized_severity, 
+            severity=normalized_severity,
             description=info.get("description", ""),
-            treatment=info.get("treatment", ""),
-            prevention=info.get("prevention", ""),
+            treatment="\n".join(treatment_list),  
+            prevention="\n".join(prevention_list),  
         )
 
         return Response(result, status=status.HTTP_200_OK)
-
 
 class RecentScansAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        scans = ScanResult.objects.order_by("-created_at")[:5]
+        scans = ScanResult.objects.order_by("-created_at")[:10]
         data = [
             {
                 "id": s.id,
@@ -147,7 +142,41 @@ class RecentScansAPIView(APIView):
                 "severity": s.severity,
                 "date": s.created_at.strftime("%d %b %Y"),
                 "status": "healthy" if s.disease.lower() == "healthy" else "warning",
+                "isHealthy": s.is_healthy,
+                "description": s.description,
+                "treatment": s.treatment,
+                "prevention": s.prevention,
+                "image": request.build_absolute_uri(s.image.url) if s.image else None,
             }
             for s in scans
         ]
         return Response(data)
+
+
+class ScanDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            s = ScanResult.objects.get(pk=pk)
+        except ScanResult.DoesNotExist:
+            return Response(
+                {"error": "Scan not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(
+            {
+                "id": s.id,
+                "crop": s.crop_type,
+                "disease": s.disease,
+                "confidence": s.confidence,
+                "severity": s.severity,
+                "date": s.created_at.strftime("%d %b %Y"),
+                "status": "healthy" if s.disease.lower() == "healthy" else "warning",
+                "isHealthy": s.is_healthy,
+                "description": s.description,
+                "treatment": s.treatment,
+                "prevention": s.prevention,
+                "image": request.build_absolute_uri(s.image.url) if s.image else None,
+            }
+        )

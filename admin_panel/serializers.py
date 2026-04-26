@@ -269,6 +269,7 @@ class ScanResultListSerializer(serializers.ModelSerializer):
             "crop_type",
             "disease",
             "confidence",
+            "is_healthy",
             "severity",
             "created_at",
         ]
@@ -286,6 +287,10 @@ class ScanResultDetailSerializer(serializers.ModelSerializer):
             "crop_type",
             "disease",
             "confidence",
+            "is_healthy",
+            "description",
+            "treatment",   
+            "prevention",            
             "severity",
             "created_at",
         ]
