@@ -4,7 +4,7 @@ from rest_framework import status
 from django.utils import timezone
 import uuid
 import json
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from .models import ChatConversation, ChatMessage, CropSuggestion
 from .serializers import (
     WeatherRequestSerializer,
@@ -145,6 +145,13 @@ class ChatView(APIView):
         session_id = serializer.validated_data['session_id']
         user_message = serializer.validated_data['message']
         
+        # dont save empty chat in db
+        if not user_message.strip():
+            return Response({
+                'success': False,
+                'error': 'Message cannot be empty'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
             user = request.user if request.user.is_authenticated else None
             
@@ -207,7 +214,7 @@ class ConversationHistoryView(APIView):
     GET endpoint to retrieve conversation history
     Usage: GET /api/conversation/{session_id}/
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdminUser]  # Only allow admins to view conversations
     
     def get(self, request, session_id):
         try:
