@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'chatbot',
     'payment',
     'kalimati_forecast',
+    'dashboard',
 
     # Third-aprty
     'rest_framework',

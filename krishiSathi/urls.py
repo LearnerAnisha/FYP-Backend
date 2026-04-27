@@ -45,6 +45,7 @@ urlpatterns = [
    path("api/chatbot/", include("chatbot.urls")),
    path("api/payment/", include("payment.urls")),
    path("api/market_forecast/", include("kalimati_forecast.urls")),
+   path("api/dashboard/", include("dashboard.urls")),
 ]
 
 if settings.DEBUG:
