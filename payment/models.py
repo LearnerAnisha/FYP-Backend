@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 
 class Payment(models.Model):
     class Status(models.TextChoices):
@@ -36,16 +37,14 @@ class Payment(models.Model):
     def __str__(self):
         return f"Payment #{self.pk} | {self.transaction_uuid} | {self.status}"
 
+
 class Subscription(models.Model):
     class Plan(models.TextChoices):
-        BASIC = "BASIC", "Basic"
+        FREE = "FREE", "Free"  # ← removed BASIC/PREMIUM, kept only these two
         PRO = "PRO", "Pro"
-        PREMIUM = "PREMIUM", "Premium"
 
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="subscription",
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="subscription"
     )
     payment = models.ForeignKey(
         Payment,
@@ -54,17 +53,46 @@ class Subscription(models.Model):
         blank=True,
         related_name="subscriptions",
     )
-    plan = models.CharField(max_length=20, choices=Plan.choices, default=Plan.BASIC)
+    plan = models.CharField(max_length=10, choices=Plan.choices, default=Plan.FREE)
     is_active = models.BooleanField(default=True)
     starts_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        ordering = ["-created_at"]
+    @property
+    def is_pro(self):
+        return (
+            self.plan == self.Plan.PRO
+            and self.is_active
+            and (self.expires_at is None or self.expires_at > timezone.now())
+        )
 
     def __str__(self):
         return (
             f"Subscription({self.user.email} | {self.plan} | active={self.is_active})"
         )
+
+
+# Daily request limits for FREE users — PRO users have unlimited access
+DAILY_LIMITS = {
+    "disease_detection": 5,
+    "weather_irrigation": 10,
+    "price_forecast": 5,
+    "chatbot": 10,
+}
+
+
+class DailyUsage(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="daily_usages"
+    )
+    feature = models.CharField(max_length=50)  # one of the keys in DAILY_LIMITS
+    date = models.DateField(default=timezone.now)
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("user", "feature", "date")
+
+    def __str__(self):
+        return f"{self.user.email} | {self.feature} | {self.date} | {self.count}"

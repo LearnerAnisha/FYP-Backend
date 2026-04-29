@@ -5,6 +5,7 @@ from .views import (
     PaymentFailureView,
     PaymentStatusView,
     PaymentListView,
+    QuotaStatusView,
 )
 
 urlpatterns = [
@@ -12,6 +13,7 @@ urlpatterns = [
     path("initiate/", InitiatePaymentView.as_view(), name="payment-initiate"),
     path("success/", PaymentSuccessView.as_view(), name="payment-success"),
     path("failure/", PaymentFailureView.as_view(), name="payment-failure"),
+    path("quota/status/", QuotaStatusView.as_view(), name="quota-status"),
 
     # Utility
     path("<int:payment_id>/status/", PaymentStatusView.as_view(), name="payment-status"),

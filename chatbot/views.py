@@ -4,15 +4,16 @@ from rest_framework import status
 from django.utils import timezone
 import uuid
 import json
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from .models import ChatConversation, ChatMessage, CropSuggestion
+from payment.quota import check_and_increment_quota
 from .serializers import (
     WeatherRequestSerializer,
     CropSuggestionRequestSerializer,
     CropSuggestionSerializer,
     ChatRequestSerializer,
     ChatResponseSerializer,
-    ChatConversationSerializer
+    ChatConversationSerializer,
 )
 from .weather_service import WeatherService
 from .gemini_service import GeminiService
@@ -64,8 +65,14 @@ class CropSuggestionView(APIView):
         "session_id": "optional-session-id"
     }
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
+    
     def post(self, request):
+
+        blocked = check_and_increment_quota(request.user, "weather_irrigation")
+        if blocked:
+            return blocked
+        
         # Validate input
         serializer = CropSuggestionRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -135,8 +142,13 @@ class ChatView(APIView):
         "message": "What fertilizer should I use for tomatoes?"
     }
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     def post(self, request):
+        
+        blocked = check_and_increment_quota(request.user, "chatbot")
+        if blocked:
+            return blocked
+        
         # Validate input
         serializer = ChatRequestSerializer(data=request.data)
         if not serializer.is_valid():

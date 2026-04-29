@@ -22,7 +22,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from payment.quota import check_and_increment_quota
 
 from .models import ModelMetric
 from .serializers import (
@@ -255,9 +256,14 @@ def _run_forecast(commodity: str, steps: int, model_type: str) -> dict:
 
 # Views
 class ForecastView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        
+        blocked = check_and_increment_quota(request.user, "price_forecast")
+        if blocked:
+            return blocked
+        
         serializer = ForecastRequestSerializer(data=request.query_params)
 
         if not serializer.is_valid():

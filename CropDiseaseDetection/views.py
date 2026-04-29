@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from payment.quota import check_and_increment_quota
 
 from .models import ScanResult
 from .ml_model import is_plant, predict_disease
@@ -37,9 +38,14 @@ SEVERITY_MAP = {
 }
 
 class DiseaseDetectionAPIView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        
+        blocked = check_and_increment_quota(request.user, "disease_detection")
+        if blocked:
+            return blocked
+        
         image = request.FILES.get("image")
 
         if not image:

@@ -6,6 +6,8 @@ from django.shortcuts import redirect as django_redirect
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.utils.timezone import now
+from .models import DailyUsage, DAILY_LIMITS
 
 from .models import Payment, Subscription
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -218,7 +220,7 @@ class PaymentSuccessView(APIView):
             frontend_url = f"{settings.FRONTEND_URL}/payment/callback?status=failed"
             return django_redirect(frontend_url)
 
-        # Step 7: Mark COMPLETE ✅
+        # Step 7: Mark COMPLETE 
         payment.status = Payment.Status.COMPLETE
         payment.esewa_ref_id = verify_response.get("ref_id")
         payment.esewa_raw_response = verify_response
@@ -348,3 +350,34 @@ class PaymentListView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class QuotaStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        try:
+            is_pro = user.subscription.is_pro
+        except Exception:
+            is_pro = False
+
+        if is_pro:
+            return Response({"plan": "PRO", "limits": "unlimited"})
+
+        today = now().date()
+        usages = DailyUsage.objects.filter(user=user, date=today)
+        usage_map = {u.feature: u.count for u in usages}
+
+        data = {
+            "plan": "FREE",
+            "quota": {
+                feature: {
+                    "used": usage_map.get(feature, 0),
+                    "limit": limit,
+                    "remaining": max(0, limit - usage_map.get(feature, 0)),
+                }
+                for feature, limit in DAILY_LIMITS.items()
+            },
+        }
+        return Response(data)
