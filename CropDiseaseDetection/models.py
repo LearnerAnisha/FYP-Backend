@@ -1,6 +1,14 @@
 from django.db import models
+from django.conf import settings
 
 class ScanResult(models.Model):
+    user = models.ForeignKey(          
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="scan_results",
+    )
     image = models.ImageField(upload_to="scans/")
     crop_type = models.CharField(max_length=100)
     disease = models.CharField(max_length=100)

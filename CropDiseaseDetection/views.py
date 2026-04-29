@@ -121,6 +121,7 @@ class DiseaseDetectionAPIView(APIView):
 
         image.seek(0)
         ScanResult.objects.create(
+            user=request.user, 
             image=image,
             crop_type=prediction["crop_type"],
             disease=prediction["disease"],
@@ -138,7 +139,7 @@ class RecentScansAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        scans = ScanResult.objects.order_by("-created_at")[:10]
+        scans = ScanResult.objects.filter(user=request.user).order_by("-created_at")[:10]
         data = [
             {
                 "id": s.id,
@@ -164,7 +165,7 @@ class ScanDetailAPIView(APIView):
 
     def get(self, request, pk):
         try:
-            s = ScanResult.objects.get(pk=pk)
+            s = ScanResult.objects.get(pk=pk, user=request.user)
         except ScanResult.DoesNotExist:
             return Response(
                 {"error": "Scan not found."}, status=status.HTTP_404_NOT_FOUND

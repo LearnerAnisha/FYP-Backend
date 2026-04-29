@@ -19,6 +19,7 @@ from .email import send_otp_email
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import RetrieveUpdateAPIView
+from django.utils import timezone
 
 class RegisterView(generics.CreateAPIView):
     """
@@ -219,18 +220,188 @@ class ChangePasswordView(APIView):
             {"message": "Password updated successfully."},
             status=200
         )
-    
-# Delete account 
+
+
+# Delete account — PRO subscribers only
 class DeleteAccountView(APIView):
+    """
+    Permanently deletes the authenticated user's account.
+    Restricted to PRO subscribers only.
+    """
+
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
         user = request.user
+
+        # Guard: only PRO users can delete
+        subscription = getattr(user, "subscription", None)
+        if not (subscription and subscription.is_pro):
+            return Response(
+                {
+                    "message": "Account deletion is available for PRO subscribers only. "
+                    "Please upgrade your plan to access this feature."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         user.delete()
-        return Response(
-            {"message": "Account deleted successfully"},
-            status=204
+        return Response({"message": "Account deleted successfully"}, status=204)
+
+
+# Export data — PRO subscribers only
+class ExportDataView(APIView):
+    """
+    Returns a downloadable JSON export of the authenticated user's full data.
+    Includes: account info, crop disease scans, chatbot conversations, crop suggestions.
+    Restricted to PRO subscribers only.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        # PRO guard
+        subscription = getattr(user, "subscription", None)
+        if not (subscription and subscription.is_pro):
+            return Response(
+                {
+                    "message": "Data export is available for PRO subscribers only. "
+                    "Please upgrade your plan to access this feature."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Account
+        farmer_profile = getattr(user, "farmer_profile", None)
+        account_data = {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "phone": user.phone or "",
+            "date_joined": user.date_joined.isoformat() if user.date_joined else None,
+            "is_verified": user.is_verified,
+            "farmer_profile": (
+                {
+                    "farm_size": (
+                        str(farmer_profile.farm_size)
+                        if farmer_profile and farmer_profile.farm_size
+                        else None
+                    ),
+                    "experience": farmer_profile.experience if farmer_profile else None,
+                    "crop_types": farmer_profile.crop_types if farmer_profile else None,
+                    "language": farmer_profile.language if farmer_profile else None,
+                    "bio": farmer_profile.bio if farmer_profile else None,
+                }
+                if farmer_profile
+                else None
+            ),
+            "subscription": {
+                "plan": subscription.plan,
+                "is_active": subscription.is_active,
+                "starts_at": (
+                    subscription.starts_at.isoformat()
+                    if subscription.starts_at
+                    else None
+                ),
+                "expires_at": (
+                    subscription.expires_at.isoformat()
+                    if subscription.expires_at
+                    else None
+                ),
+            },
+        }
+
+        # Crop Disease Scans
+        from CropDiseaseDetection.models import ScanResult
+
+        scans = ScanResult.objects.filter(user=user).order_by("-created_at")
+        scans_data = [
+            {
+                "id": s.id,
+                "crop_type": s.crop_type,
+                "disease": s.disease,
+                "confidence": round(s.confidence, 2),
+                "is_healthy": s.is_healthy,
+                "severity": s.severity,
+                "description": s.description,
+                "treatment": s.treatment,
+                "prevention": s.prevention,
+                "scanned_at": s.created_at.isoformat(),
+            }
+            for s in scans
+        ]
+
+        # Chatbot Conversations
+        from chatbot.models import ChatConversation
+
+        conversations = (
+            ChatConversation.objects.filter(user=user)
+            .prefetch_related("messages")
+            .order_by("-created_at")
         )
+        chats_data = [
+            {
+                "session_id": conv.session_id,
+                "started_at": conv.created_at.isoformat(),
+                "last_active": conv.updated_at.isoformat(),
+                "messages": [
+                    {
+                        "role": msg.role,
+                        "content": msg.content,
+                        "timestamp": msg.timestamp.isoformat(),
+                    }
+                    for msg in conv.messages.all()
+                ],
+            }
+            for conv in conversations
+        ]
+
+        # Crop Suggestions
+        from chatbot.models import CropSuggestion
+
+        suggestions = CropSuggestion.objects.filter(conversation__user=user).order_by(
+            "-created_at"
+        )
+        suggestions_data = [
+            {
+                "id": s.id,
+                "crop_name": s.crop_name,
+                "growth_stage": s.growth_stage,
+                "weather_conditions": s.weather_conditions,
+                "suggestion": s.suggestion,
+                "suggested_at": s.created_at.isoformat(),
+            }
+            for s in suggestions
+        ]
+
+        # Final Payload
+        export_payload = {
+            "exported_at": timezone.now().isoformat(),
+            "account": account_data,
+            "disease_scans": {
+                "total": len(scans_data),
+                "records": scans_data,
+            },
+            "chatbot_conversations": {
+                "total": len(chats_data),
+                "records": chats_data,
+            },
+            "crop_suggestions": {
+                "total": len(suggestions_data),
+                "records": suggestions_data,
+            },
+        }
+
+        from django.http import JsonResponse
+
+        response = JsonResponse(export_payload, json_dumps_params={"indent": 2})
+        response["Content-Disposition"] = (
+            'attachment; filename="krishisathi_export.json"'
+        )
+        return response
+
 
 # Resend OTP
 class ResendOTPView(APIView):
@@ -281,4 +452,3 @@ class ResendOTPView(APIView):
             {"message": "A new OTP has been sent to your email."},
             status=status.HTTP_200_OK
         )
-        
