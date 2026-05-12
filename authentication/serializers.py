@@ -7,9 +7,10 @@ with strong input validation and clear error messages.
 
 import re
 from rest_framework import serializers
-from .models import FarmerProfile, User
+from .models import FarmerProfile, User, SavedReport
 from django.utils.timezone import now
 from payment.models import Subscription
+from CropDiseaseDetection.models import ScanResult  
 
 class RegisterSerializer(serializers.ModelSerializer):
     """
@@ -138,7 +139,7 @@ class LoginSerializer(serializers.Serializer):
 
         data["user"] = user
         return data
-    
+
 class FarmerProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = FarmerProfile
@@ -154,10 +155,15 @@ class SubscriptionBriefSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Subscription
         fields = ["plan", "is_active", "expires_at"]
+
 class ProfileSerializer(serializers.ModelSerializer):
     active_days = serializers.SerializerMethodField()
+    total_scans = serializers.SerializerMethodField()
+    saved_reports = serializers.SerializerMethodField()
+    success_rate = serializers.SerializerMethodField()
     farmer_profile = FarmerProfileSerializer(required=False)
     subscription = SubscriptionBriefSerializer(read_only=True)
+
     class Meta:
         model = User
         fields = [
@@ -167,6 +173,9 @@ class ProfileSerializer(serializers.ModelSerializer):
             "avatar",
             "date_joined",
             "active_days",
+            "total_scans",
+            "saved_reports",
+            "success_rate",
             "farmer_profile",
             "subscription",
         ]
@@ -175,20 +184,27 @@ class ProfileSerializer(serializers.ModelSerializer):
     def get_active_days(self, obj):
         return (now().date() - obj.date_joined.date()).days + 1
 
+    def get_total_scans(self, obj):
+        return obj.scan_results.count()
+
+    def get_saved_reports(self, obj):
+        return obj.saved_reports.count()
+
+    def get_success_rate(self, obj):
+        total = obj.scan_results.count()
+        if total == 0:
+            return "0%"
+        healthy = obj.scan_results.filter(is_healthy=True).count()
+        return f"{round(healthy / total * 100)}%"
+
     def update(self, instance, validated_data):
         farmer_data = validated_data.pop("farmer_profile", None)
-
-        # Update User fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-
-        # Update or create FarmerProfile
         if farmer_data:
             profile, _ = FarmerProfile.objects.get_or_create(user=instance)
             for attr, value in farmer_data.items():
                 setattr(profile, attr, value)
             profile.save()
-
         return instance
-    

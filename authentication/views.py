@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User, EmailOTP, generate_otp
+from .models import User, EmailOTP, generate_otp, SavedReport
 from .serializers import ProfileSerializer, RegisterSerializer, LoginSerializer
 from .email import send_otp_email
 from django.contrib.auth.password_validation import validate_password
@@ -393,7 +393,9 @@ class ExportDataView(APIView):
                 "records": suggestions_data,
             },
         }
-
+        
+        SavedReport.objects.create(user=user, report_data=export_payload)
+        
         from django.http import JsonResponse
 
         response = JsonResponse(export_payload, json_dumps_params={"indent": 2})

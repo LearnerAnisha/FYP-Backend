@@ -148,3 +148,13 @@ def generate_otp():
     # secrets.randbelow(n) returns a random int in [0, n)
     # We shift by 100000 to ensure always 6 digits (100000–999999)
     return str(secrets.randbelow(900000) + 100000)
+
+class SavedReport(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="saved_reports"
+    )
+    report_data = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Report by {self.user.email} at {self.created_at}"

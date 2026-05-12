@@ -39,14 +39,16 @@ class DashboardStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        user = request.user  # ✅ get the logged-in user
         now = timezone.now()
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         prev_month_start = (month_start - timedelta(days=1)).replace(
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
 
-        def month_count(qs_filter):
-            return ScanResult.objects.filter(**qs_filter).count()
+        # ✅ All queries now filtered by user
+        def month_count(extra_filters):
+            return ScanResult.objects.filter(user=user, **extra_filters).count()
 
         scans_now = month_count({"created_at__gte": month_start})
         scans_prev = month_count(
@@ -71,9 +73,12 @@ class DashboardStatsView(APIView):
             }
         )
 
-        chats_now = ChatConversation.objects.filter(created_at__gte=month_start).count()
+        # ✅ Chat queries also filtered by user
+        chats_now = ChatConversation.objects.filter(
+            user=user, created_at__gte=month_start
+        ).count()
         chats_prev = ChatConversation.objects.filter(
-            created_at__gte=prev_month_start, created_at__lt=month_start
+            user=user, created_at__gte=prev_month_start, created_at__lt=month_start
         ).count()
 
         stats = [
@@ -99,9 +104,9 @@ class DashboardStatsView(APIView):
             },
         ]
 
-        # Recent activity — last 5 scans
+        # ✅ Recent activity filtered by user — last 5 scans
         recent_activity = []
-        for scan in ScanResult.objects.order_by("-created_at")[:5]:
+        for scan in ScanResult.objects.filter(user=user).order_by("-created_at")[:5]:
             if scan.is_healthy:
                 recent_activity.append(
                     {
@@ -123,8 +128,10 @@ class DashboardStatsView(APIView):
                     }
                 )
 
-        # Latest chat session
-        latest_chat = ChatConversation.objects.order_by("-updated_at").first()
+        # ✅ Latest chat session filtered by user
+        latest_chat = (
+            ChatConversation.objects.filter(user=user).order_by("-updated_at").first()
+        )
         if latest_chat:
             recent_activity.append(
                 {
