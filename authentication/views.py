@@ -5,6 +5,7 @@ Defines API endpoints for:
 1. User registration
 2. Email OTP verification
 3. JWT-based authentication
+4. Forgot / Reset Password
 """
 
 from rest_framework import generics, status
@@ -15,124 +16,110 @@ from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, EmailOTP, generate_otp, SavedReport
 from .serializers import ProfileSerializer, RegisterSerializer, LoginSerializer
-from .email import send_otp_email
+from .email import send_otp_email, send_password_reset_email
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import RetrieveUpdateAPIView
 from django.utils import timezone
+import secrets
+import hashlib
+from datetime import timedelta
+
+# In-memory token store: token_hash -> {user_id, expires_at}
+# For multi-server / production, replace with a DB model or Redis.
+_reset_tokens = {}
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
 
 class RegisterView(generics.CreateAPIView):
-    """
-    Registers a new user and sends an email OTP for verification.
-    """
-
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-
         try:
             serializer.is_valid(raise_exception=True)
         except ValidationError as e:
             return Response(
-                {
-                    "status": "error",
-                    "errors": e.detail
-                },
-                status=status.HTTP_400_BAD_REQUEST
+                {"status": "error", "errors": e.detail},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         user = serializer.save(is_verified=False)
         otp_code = generate_otp()
         EmailOTP.objects.update_or_create(user=user, defaults={"code": otp_code})
-
         try:
             send_otp_email(user, otp_code)
-        except Exception as e:
-            # User and OTP are saved — they can resend. Don't 500.
+        except Exception:
             return Response(
                 {
                     "status": "success",
                     "message": "Account created but email delivery failed. Use resend OTP.",
                     "email": user.email,
                 },
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_201_CREATED,
             )
-
         return Response(
             {
                 "status": "success",
                 "message": "Registration successful. OTP sent to your email.",
                 "email": user.email,
             },
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
 
-class VerifyOTPView(APIView):
-    """
-    Verifies the OTP submitted by the user.
-    """
 
+class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         email = request.data.get("email")
         otp_input = request.data.get("otp")
-
         try:
             user = User.objects.get(email=email)
             otp_obj = EmailOTP.objects.get(user=user)
         except (User.DoesNotExist, EmailOTP.DoesNotExist):
             return Response(
                 {"message": "Invalid email or OTP."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-
         if otp_obj.is_expired():
             otp_obj.delete()
             return Response(
                 {"message": "OTP has expired."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-
         if otp_obj.code != otp_input:
             return Response(
                 {"message": "Incorrect OTP."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-
         user.is_verified = True
         user.save()
         otp_obj.delete()
-
         return Response(
             {"message": "Email verified successfully."},
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
 
-class LoginView(generics.GenericAPIView):
-    """
-    Authenticates verified users and issues JWT tokens.
-    """
 
+class LoginView(generics.GenericAPIView):
     serializer_class = LoginSerializer
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         user = serializer.validated_data["user"]
-
         if not user.is_verified:
             return Response(
                 {"message": "Email verification required."},
-                status=status.HTTP_403_FORBIDDEN
+                status=status.HTTP_403_FORBIDDEN,
             )
-
         refresh = RefreshToken.for_user(user)
-
         return Response(
             {
                 "access": str(refresh.access_token),
@@ -141,139 +128,190 @@ class LoginView(generics.GenericAPIView):
                     "id": user.id,
                     "full_name": user.full_name,
                     "email": user.email,
-                    "phone": user.phone
-                }
+                    "phone": user.phone,
+                },
             },
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
-class ProfileView(RetrieveUpdateAPIView):
+
+
+#  Forgot Password
+class ForgotPasswordView(APIView):
     """
-    API endpoint for retrieving and updating
-    the currently authenticated user's profile.
+    POST /api/auth/forgot-password/
+    Body: { "email": "user@example.com" }
 
-    HTTP Methods:
-    - GET  : Retrieve profile data
-    - PUT  : Update profile data
-
-    Security:
-    - Requires valid JWT token
-    - Users can only access their own profile
+    Sends a password-reset link to the given email.
+    Always returns 200 to prevent email enumeration.
     """
 
-    serializer_class = ProfileSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_object(self):
-        """
-        Returns the currently authenticated user.
-
-        DRF automatically sets request.user
-        when a valid JWT token is provided.
-        """
-        return self.request.user
-class ChangePasswordView(APIView):
-    """
-    API endpoint for changing user password.
-
-    Workflow:
-    1. Verify current password
-    2. Validate new password against Django's password policies
-    3. Save the new password securely
-
-    Security:
-    - JWT authentication required
-    - Old password must be correct
-    """
-
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def post(self, request):
-        """
-        Handles password change request.
-        """
+        email = request.data.get("email", "").strip().lower()
 
-        user = request.user
-        current_password = request.data.get("current")
-        new_password = request.data.get("new")
-
-        # Step 1: Validate current password
-        if not user.check_password(current_password):
+        if not email:
             return Response(
-                {"message": "Current password is incorrect."},
-                status=400
+                {"message": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Step 2: Validate new password strength
+        GENERIC_MSG = "If an account exists for this email, a reset link has been sent."
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"message": GENERIC_MSG}, status=status.HTTP_200_OK)
+
+        # Generate a secure URL-safe token
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = _hash_token(raw_token)
+        expires_at = timezone.now() + timedelta(minutes=30)
+
+        _reset_tokens[token_hash] = {
+            "user_id": user.id,
+            "expires_at": expires_at,
+        }
+
+        from django.conf import settings as django_settings
+
+        frontend_url = getattr(django_settings, "FRONTEND_URL", "http://localhost:5173")
+        reset_link = f"{frontend_url}/reset-password?token={raw_token}"
+
+        try:
+            send_password_reset_email(user, reset_link)
+        except Exception:
+            return Response(
+                {"message": "Failed to send reset email. Please try again later."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response({"message": GENERIC_MSG}, status=status.HTTP_200_OK)
+
+
+#  Reset Password
+class ResetPasswordView(APIView):
+    """
+    POST /api/auth/reset-password/
+    Body: { "token": "<from_email_link>", "password": "newPass123!" }
+
+    Validates the token, sets the new password, then invalidates the token.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        raw_token = request.data.get("token", "").strip()
+        new_password = request.data.get("password", "").strip()
+
+        if not raw_token or not new_password:
+            return Response(
+                {"message": "Token and new password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        token_hash = _hash_token(raw_token)
+        entry = _reset_tokens.get(token_hash)
+
+        if not entry:
+            return Response(
+                {"message": "Invalid or expired reset link."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if timezone.now() > entry["expires_at"]:
+            del _reset_tokens[token_hash]
+            return Response(
+                {"message": "Reset link has expired. Please request a new one."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(id=entry["user_id"])
+        except User.DoesNotExist:
+            del _reset_tokens[token_hash]
+            return Response(
+                {"message": "User not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             validate_password(new_password, user)
         except Exception as e:
             return Response(
-                {"errors": e.messages},
-                status=400
+                {"message": e.messages[0] if e.messages else "Password is too weak."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Step 3: Set and save new password
         user.set_password(new_password)
         user.save()
+        del _reset_tokens[token_hash]  # One-time use
 
         return Response(
-            {"message": "Password updated successfully."},
-            status=200
+            {"message": "Password reset successfully. You can now log in."},
+            status=status.HTTP_200_OK,
         )
 
 
-# Delete account — PRO subscribers only
-class DeleteAccountView(APIView):
-    """
-    Permanently deletes the authenticated user's account.
-    Restricted to PRO subscribers only.
-    """
+# ─────────────────────────────────────────────
+#  Existing views (unchanged below)
+# ─────────────────────────────────────────────
+class ProfileView(RetrieveUpdateAPIView):
+    serializer_class = ProfileSerializer
+    permission_classes = [IsAuthenticated]
 
+    def get_object(self):
+        return self.request.user
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        current_password = request.data.get("current")
+        new_password = request.data.get("new")
+
+        if not user.check_password(current_password):
+            return Response({"message": "Current password is incorrect."}, status=400)
+
+        try:
+            validate_password(new_password, user)
+        except Exception as e:
+            return Response({"errors": e.messages}, status=400)
+
+        user.set_password(new_password)
+        user.save()
+        return Response({"message": "Password updated successfully."}, status=200)
+
+
+class DeleteAccountView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
         user = request.user
-
-        # Guard: only PRO users can delete
         subscription = getattr(user, "subscription", None)
         if not (subscription and subscription.is_pro):
             return Response(
-                {
-                    "message": "Account deletion is available for PRO subscribers only. "
-                    "Please upgrade your plan to access this feature."
-                },
+                {"message": "Account deletion is available for PRO subscribers only."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
         user.delete()
         return Response({"message": "Account deleted successfully"}, status=204)
 
 
-# Export data — PRO subscribers only
 class ExportDataView(APIView):
-    """
-    Returns a downloadable JSON export of the authenticated user's full data.
-    Includes: account info, crop disease scans, chatbot conversations, crop suggestions.
-    Restricted to PRO subscribers only.
-    """
-
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
-
-        # PRO guard
         subscription = getattr(user, "subscription", None)
         if not (subscription and subscription.is_pro):
             return Response(
-                {
-                    "message": "Data export is available for PRO subscribers only. "
-                    "Please upgrade your plan to access this feature."
-                },
+                {"message": "Data export is available for PRO subscribers only."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Account
         farmer_profile = getattr(user, "farmer_profile", None)
         account_data = {
             "id": user.id,
@@ -313,7 +351,6 @@ class ExportDataView(APIView):
             },
         }
 
-        # Crop Disease Scans
         from CropDiseaseDetection.models import ScanResult
 
         scans = ScanResult.objects.filter(user=user).order_by("-created_at")
@@ -333,7 +370,6 @@ class ExportDataView(APIView):
             for s in scans
         ]
 
-        # Chatbot Conversations
         from chatbot.models import ChatConversation
 
         conversations = (
@@ -358,7 +394,6 @@ class ExportDataView(APIView):
             for conv in conversations
         ]
 
-        # Crop Suggestions
         from chatbot.models import CropSuggestion
 
         suggestions = CropSuggestion.objects.filter(conversation__user=user).order_by(
@@ -376,26 +411,19 @@ class ExportDataView(APIView):
             for s in suggestions
         ]
 
-        # Final Payload
         export_payload = {
             "exported_at": timezone.now().isoformat(),
             "account": account_data,
-            "disease_scans": {
-                "total": len(scans_data),
-                "records": scans_data,
-            },
-            "chatbot_conversations": {
-                "total": len(chats_data),
-                "records": chats_data,
-            },
+            "disease_scans": {"total": len(scans_data), "records": scans_data},
+            "chatbot_conversations": {"total": len(chats_data), "records": chats_data},
             "crop_suggestions": {
                 "total": len(suggestions_data),
                 "records": suggestions_data,
             },
         }
-        
+
         SavedReport.objects.create(user=user, report_data=export_payload)
-        
+
         from django.http import JsonResponse
 
         response = JsonResponse(export_payload, json_dumps_params={"indent": 2})
@@ -405,52 +433,37 @@ class ExportDataView(APIView):
         return response
 
 
-# Resend OTP
 class ResendOTPView(APIView):
-    """
-    Resends a fresh OTP to the user's email.
-    Only works for unverified accounts.
-    """
     permission_classes = [AllowAny]
 
     def post(self, request):
         email = request.data.get("email")
-
         if not email:
             return Response(
-                {"message": "Email is required."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"message": "Email is required."}, status=status.HTTP_400_BAD_REQUEST
             )
-
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             return Response(
                 {"message": "No account found with this email."},
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_404_NOT_FOUND,
             )
-
         if user.is_verified:
             return Response(
                 {"message": "This account is already verified."},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-
         otp_code = generate_otp()
-        EmailOTP.objects.update_or_create(
-            user=user,
-            defaults={"code": otp_code}
-        )
-
+        EmailOTP.objects.update_or_create(user=user, defaults={"code": otp_code})
         try:
             send_otp_email(user, otp_code)
         except Exception:
             return Response(
                 {"message": "Failed to send email. Please try again."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
         return Response(
             {"message": "A new OTP has been sent to your email."},
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
         )
