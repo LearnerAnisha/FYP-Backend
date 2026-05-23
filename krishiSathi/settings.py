@@ -265,3 +265,7 @@ DATA_DIR = BASE_DIR / 'kalimati_forecast' / 'data'
 DATA_DIR.mkdir(exist_ok=True)
  
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Sparrow SMS
+SPARROW_SMS_TOKEN = os.getenv("SPARROW_SMS_TOKEN", "")
+SPARROW_SMS_FROM  = os.getenv("SPARROW_SMS_FROM", "KrishiSathi")

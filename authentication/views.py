@@ -1,13 +1,3 @@
-"""
-views.py
----------
-Defines API endpoints for:
-1. User registration
-2. Email OTP verification
-3. JWT-based authentication
-4. Forgot / Reset Password
-"""
-
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,6 +14,7 @@ from django.utils import timezone
 import secrets
 import hashlib
 from datetime import timedelta
+from .sms import send_otp_sms
 
 # In-memory token store: token_hash -> {user_id, expires_at}
 # For multi-server / production, replace with a DB model or Redis.
@@ -32,6 +23,23 @@ _reset_tokens = {}
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _deliver_otp(user, otp_code):
+    """Sends OTP to email (always) and SMS (if phone exists)."""
+    result = {"email_sent": False, "sms_sent": False}
+    try:
+        send_otp_email(user, otp_code)
+        result["email_sent"] = True
+    except Exception:
+        pass
+    if getattr(user, "phone", None):
+        try:
+            send_otp_sms(user, otp_code)
+            result["sms_sent"] = True
+        except Exception:
+            pass
+    return result
 
 
 class RegisterView(generics.CreateAPIView):
@@ -51,26 +59,20 @@ class RegisterView(generics.CreateAPIView):
         user = serializer.save(is_verified=False)
         otp_code = generate_otp()
         EmailOTP.objects.update_or_create(user=user, defaults={"code": otp_code})
-        try:
-            send_otp_email(user, otp_code)
-        except Exception:
-            return Response(
-                {
-                    "status": "success",
-                    "message": "Account created but email delivery failed. Use resend OTP.",
-                    "email": user.email,
-                },
-                status=status.HTTP_201_CREATED,
-            )
+
+        delivery = _deliver_otp(user, otp_code)
+        channels = []
+        if delivery["email_sent"]: channels.append("email")
+        if delivery["sms_sent"]: channels.append("phone")
+
         return Response(
             {
                 "status": "success",
-                "message": "Registration successful. OTP sent to your email.",
+                "message": f"Registration successful. OTP sent to your {' and '.join(channels)}.",
                 "email": user.email,
             },
             status=status.HTTP_201_CREATED,
         )
-
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
@@ -456,14 +458,13 @@ class ResendOTPView(APIView):
             )
         otp_code = generate_otp()
         EmailOTP.objects.update_or_create(user=user, defaults={"code": otp_code})
-        try:
-            send_otp_email(user, otp_code)
-        except Exception:
-            return Response(
-                {"message": "Failed to send email. Please try again."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+
+        delivery = _deliver_otp(user, otp_code)
+        channels = []
+        if delivery["email_sent"]: channels.append("email")
+        if delivery["sms_sent"]: channels.append("phone")
+
         return Response(
-            {"message": "A new OTP has been sent to your email."},
+            {"message": f"A new OTP has been sent to your {' and '.join(channels)}."},
             status=status.HTTP_200_OK,
         )
