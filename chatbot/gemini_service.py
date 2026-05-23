@@ -1,5 +1,6 @@
 import requests
 import json
+from django.conf import settings 
 
 class GeminiService:
     """
@@ -8,12 +9,11 @@ class GeminiService:
     """
 
     def __init__(self):
-        self.base_url = "http://host.docker.internal:11434/api/generate"
+        base = getattr(settings, "OLLAMA_BASE_URL", "http://localhost:11434")
+        self.base_url = f"{base}/api/generate"
         self.model = "llama3.2"
 
-    # -----------------------------
     # CORE FUNCTION (Ollama call)
-    # -----------------------------
     def _generate(self, prompt):
         try:
             response = requests.post(
@@ -33,15 +33,13 @@ class GeminiService:
         except Exception as e:
             raise Exception(f"Ollama error: {str(e)}")
 
-    # -----------------------------
     # CROP SUGGESTION
-    # -----------------------------
     def get_crop_suggestion(self, crop_name, growth_stage, weather_data):
         prompt = self._create_crop_prompt(crop_name, growth_stage, weather_data)
 
         response = self._generate(prompt)
 
-        # 🔥 Important: force JSON safety (llama sometimes adds text)
+        # Important: force JSON safety (llama sometimes adds text)
         try:
             return response[response.index("{"):response.rindex("}")+1]
         except:
@@ -102,40 +100,35 @@ Respond ONLY in valid JSON using this exact format:
 Do not include explanations or markdown.
 """.strip()
 
-    # -----------------------------
     # SIMPLE CHAT
-    # -----------------------------
     def chat(self, user_message, conversation_history=None):
         return self._generate(user_message)
 
-    # -----------------------------
     # CHAT WITH CONTEXT
-    # -----------------------------
     def chat_with_context(self, user_message, conversation_history=None):
         agricultural_context = """
-You are a helpful agricultural chatbot assistant.
-
-Rules:
-- Reply in SHORT conversational answers.
-- Keep responses under 120 words.
-- Be practical and direct.
-- No markdown.
-""".strip()
+    You are a helpful agricultural chatbot assistant for Nepali farmers.
+    Rules:
+    - Answer ONLY the latest user message.
+    - Keep responses under 120 words.
+    - Be practical and direct.
+    - No markdown.
+    """.strip()
 
         messages = [agricultural_context]
 
         if conversation_history:
             for msg in conversation_history:
-                messages.append(msg["content"])
+                role = "User" if msg["role"] == "user" else "Assistant"
+                messages.append(f"{role}: {msg['content']}") 
 
-        messages.append(user_message)
+        messages.append(f"User: {user_message}")
+        messages.append("Assistant:") 
 
         prompt = "\n\n".join(messages)
-
         return self._generate(prompt)
 
-    # -----------------------------
+
     # IMAGE (NOT SUPPORTED IN LLAMA3.2)
-    # -----------------------------
     def analyze_image(self, image_path, prompt):
         raise Exception("Image analysis not supported with llama3.2 in Ollama")

@@ -4,7 +4,9 @@ from .views import (
     WeatherView,
     CropSuggestionView,
     ChatView,
-    ConversationHistoryView
+    ConversationHistoryView,
+    DeleteConversationView,
+    EditMessageView
 )
 
 urlpatterns = [
@@ -22,4 +24,7 @@ urlpatterns = [
     
     # all conversations
     path('conversations/', UserConversationsView.as_view(), name='user-conversations'),
+    
+    path('conversation/<str:session_id>/delete/', DeleteConversationView.as_view()),
+    path('message/<int:message_id>/edit/', EditMessageView.as_view()),
 ]

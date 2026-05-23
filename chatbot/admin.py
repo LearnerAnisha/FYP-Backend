@@ -4,17 +4,18 @@ from .models import ChatConversation, ChatMessage, WeatherData, CropSuggestion
 @admin.register(ChatConversation)
 class ChatConversationAdmin(admin.ModelAdmin):
     """Admin interface for conversations"""
-    list_display = ['session_id', 'user', 'created_at', 'updated_at']
-    list_filter = ['created_at']
-    search_fields = ['session_id', 'user__username']
-    readonly_fields = ['created_at', 'updated_at']
+    list_display = ['session_id', 'user', 'is_deleted', 'created_at', 'updated_at', 'deleted_at']
+    list_filter = ['is_deleted', 'created_at']
+    search_fields = ['session_id', 'user__email']
+    readonly_fields = ['created_at', 'updated_at', 'deleted_at']
 
 @admin.register(ChatMessage)
 class ChatMessageAdmin(admin.ModelAdmin):
     """Admin interface for messages"""
-    list_display = ['conversation', 'role', 'content_preview', 'timestamp']
-    list_filter = ['role', 'timestamp']
-    search_fields = ['content', 'conversation__session_id']
+    list_display = ['conversation', 'role', 'content_preview', 'is_edited', 'timestamp']
+    list_filter = ['role', 'is_edited', 'timestamp']
+    search_fields = ['content', 'original_content', 'conversation__session_id']
+    readonly_fields = ['timestamp', 'original_content', 'edited_at']
     readonly_fields = ['timestamp']
     
     def content_preview(self, obj):

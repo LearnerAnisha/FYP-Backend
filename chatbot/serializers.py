@@ -4,7 +4,7 @@ from .models import ChatConversation, ChatMessage, CropSuggestion
 class ChatMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatMessage
-        fields = ["id", "role", "content", "timestamp"]
+        fields = ["id", "role", "content", "timestamp", "is_edited", "edited_at", "original_content"]
         read_only_fields = ["id", "timestamp"]
 
 class ConversationUserSerializer(serializers.Serializer):
@@ -12,7 +12,7 @@ class ConversationUserSerializer(serializers.Serializer):
     full_name = serializers.SerializerMethodField()
 
     def get_full_name(self, obj):
-        return f"{obj.first_name} {obj.last_name}".strip() or obj.username
+        return obj.full_name or obj.email
 
 class ChatConversationSerializer(serializers.ModelSerializer):
     messages = ChatMessageSerializer(many=True, read_only=True)

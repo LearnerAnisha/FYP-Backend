@@ -226,17 +226,19 @@ class ConversationHistoryView(APIView):
     GET endpoint to retrieve conversation history
     Usage: GET /api/conversation/{session_id}/
     """
-    permission_classes = [IsAdminUser]  # Only allow admins to view conversations
-    
+    permission_classes = [IsAuthenticated]  
+
     def get(self, request, session_id):
         try:
-            conversation = ChatConversation.objects.get(session_id=session_id)
+            conversation = ChatConversation.objects.get(
+                session_id=session_id, user=request.user, is_deleted=False
+            )
             serializer = ChatConversationSerializer(conversation)
             return Response({
                 'success': True,
                 'conversation': serializer.data
             }, status=status.HTTP_200_OK)
-        
+
         except ChatConversation.DoesNotExist:
             return Response({
                 'success': False,
@@ -250,16 +252,18 @@ class UserConversationsView(APIView):
     Usage: GET /api/conversations/
     """
     permission_classes = [AllowAny]
-    
+
     def get(self, request):
         try:
             # Get all conversations, ordered by most recent
-            conversations = ChatConversation.objects.all().order_by('-updated_at')
-            
+            conversations = ChatConversation.objects.filter(
+                user=request.user, is_deleted=False 
+            ).order_by("-updated_at")
+
             # If user is authenticated, filter by user
             if request.user.is_authenticated:
                 conversations = conversations.filter(user=request.user)
-            
+
             # Return basic info about each conversation
             data = []
             for conv in conversations[:20]:  # Limit to 20 most recent
@@ -271,14 +275,67 @@ class UserConversationsView(APIView):
                     'message_count': conv.messages.count(),
                     'last_message': last_message.content[:100] if last_message else None,
                 })
-            
+
             return Response({
                 'success': True,
                 'conversations': data
             }, status=status.HTTP_200_OK)
-        
+
         except Exception as e:
             return Response({
                 'success': False,
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# DELETE a conversation (soft delete)
+class DeleteConversationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, session_id):
+        try:
+            conversation = ChatConversation.objects.get(
+                session_id=session_id, user=request.user, is_deleted=False
+            )
+            conversation.is_deleted = True
+            conversation.deleted_at = timezone.now()
+            conversation.save()
+            return Response({"success": True})
+        except ChatConversation.DoesNotExist:
+            return Response({"success": False, "error": "Not found"}, status=404)
+
+
+# EDIT a message
+class EditMessageView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, message_id):
+        try:
+            message = ChatMessage.objects.get(
+                id=message_id,
+                role="user",  # only user messages can be edited
+                conversation__user=request.user,
+            )
+            new_content = request.data.get("content", "").strip()
+            if not new_content:
+                return Response(
+                    {"success": False, "error": "Content is empty"}, status=400
+                )
+
+            # Save original before editing
+            if not message.is_edited:
+                message.original_content = message.content
+
+            message.content = new_content
+            message.is_edited = True
+            message.edited_at = timezone.now()
+            message.save()
+
+            # Delete all messages after this one so AI re-responds
+            ChatMessage.objects.filter(
+                conversation=message.conversation, timestamp__gt=message.timestamp
+            ).delete()
+
+            return Response({"success": True, "message_id": message.id})
+        except ChatMessage.DoesNotExist:
+            return Response({"success": False, "error": "Not found"}, status=404)
