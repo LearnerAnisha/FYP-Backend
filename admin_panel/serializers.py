@@ -317,7 +317,7 @@ class ScanResultSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
-        
+
 # ADMIN ACTIVITY LOG SERIALIZERS
 
 class AdminActivityLogSerializer(serializers.ModelSerializer):
@@ -388,23 +388,39 @@ class AdminDailyPriceHistorySerializer(serializers.ModelSerializer):
 class AdminSubscriptionSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source="user.email", read_only=True)
     user_name = serializers.CharField(source="user.full_name", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
     payment_uuid = serializers.UUIDField(
         source="payment.transaction_uuid", read_only=True, allow_null=True
     )
+    payment_amount = serializers.DecimalField(
+        source="payment.total_amount",
+        max_digits=12,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True,
+    )
+    expires_at_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
         fields = [
             "id",
-            "user",
+            "user_id",
             "user_email",
             "user_name",
             "payment",
             "payment_uuid",
+            "payment_amount",
             "plan",
             "is_active",
             "starts_at",
             "expires_at",
+            "expires_at_display",
             "created_at",
         ]
         read_only_fields = fields
+
+    def get_expires_at_display(self, obj):
+        if obj.expires_at is None:
+            return "Never (Free Plan)" if obj.plan == "FREE" else "Lifetime"
+        return obj.expires_at

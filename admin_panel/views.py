@@ -332,7 +332,7 @@ class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
             target_user=instance,
             request=self.request,
         )
-        instance.delete()
+        instance.soft_delete()
 
 class AdminToggleUserStatusView(APIView):
     """
@@ -449,7 +449,7 @@ class ChatConversationDetailView(generics.RetrieveUpdateDestroyAPIView):
             target_user=instance.user,
             request=self.request,
         )
-        instance.delete()
+        instance.soft_delete()
 
 class ChatMessageListView(generics.ListAPIView):
     serializer_class = ChatMessageSerializer
@@ -542,7 +542,7 @@ class ScanResultViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ["severity"]
     search_fields = ["crop_type", "disease"]
-    
+
 # ACTIVITY LOGS
 
 class AdminActivityLogListView(generics.ListAPIView):
@@ -631,7 +631,7 @@ class AdminMasterProductDetailView(generics.RetrieveUpdateDestroyAPIView):
             description=f"Deleted product {instance.commodityname}",
             request=self.request,
         )
-        instance.delete()
+        instance.soft_delete()
 
 class AdminDailyPriceHistoryListView(generics.ListAPIView):
     """
@@ -678,7 +678,7 @@ class AdminDailyPriceHistoryDetailView(generics.RetrieveUpdateDestroyAPIView):
             description=f"Deleted price history for {instance.product.commodityname} on {instance.date}",
             request=self.request,
         )
-        instance.delete()
+        instance.soft_delete()
 
 class AdminMarketPriceAnalysisView(MarketPriceAnalysisAPIView):
     """
@@ -761,4 +761,24 @@ class AdminSubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
             target_user=instance.user,
             request=self.request,
         )
-        instance.delete()
+        instance.soft_delete()
+
+
+class AdminRestoreUserView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def patch(self, request, id):
+        try:
+            user = User.all_objects.get(id=id, is_deleted=True)
+        except User.DoesNotExist:
+            return Response({"message": "Deleted user not found."}, status=404)
+
+        user.restore()
+        log_admin_action(
+            admin_user=request.user,
+            action="activate",
+            description=f"Restored soft-deleted user {user.email}",
+            target_user=user,
+            request=request,
+        )
+        return Response({"message": "User restored successfully."})

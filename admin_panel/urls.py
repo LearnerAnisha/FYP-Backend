@@ -37,6 +37,7 @@ from .views import (
     # subscription
     AdminSubscriptionListView,
     AdminSubscriptionDetailView,
+    AdminRestoreUserView,
 )
 
 app_name = "admin_panel"
@@ -115,4 +116,6 @@ urlpatterns = [
         AdminSubscriptionDetailView.as_view(),
         name="subscription-detail",
     ),
+    
+    path("users/<int:id>/restore/", AdminRestoreUserView.as_view(), name="restore-user"),
 ]
