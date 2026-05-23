@@ -52,7 +52,7 @@ from .utils import log_admin_action
 
 
 class AdminPagination(PageNumberPagination):
-    page_size = 20
+    page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 100
 
@@ -142,7 +142,8 @@ class AdminDashboardStatsView(APIView):
         total_farmers = FarmerProfile.objects.count()
 
         # Chatbot statistics
-        total_conversations = ChatConversation.objects.count()
+        total_conversations = ChatConversation.objects.filter(is_deleted=False).count()
+        deleted_conversations = ChatConversation.objects.filter(is_deleted=True).count()
         total_messages = ChatMessage.objects.count()
 
         # Disease scan statistics
@@ -173,6 +174,7 @@ class AdminDashboardStatsView(APIView):
                 },
                 "chatbot": {
                     "total_conversations": total_conversations,
+                    "deleted_conversations": deleted_conversations,
                     "total_messages": total_messages,
                 },
                 "disease_detection": {

@@ -169,7 +169,8 @@ class AdminUserDetailSerializer(serializers.ModelSerializer):
 class ChatMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatMessage
-        fields = ["id", "conversation", "role", "content", "timestamp"]
+        fields = ["id", "conversation", "role", "content", "timestamp", "is_edited", "edited_at", "original_content"  
+        ]
         read_only_fields = ["timestamp"]
 
 class ChatConversationListSerializer(serializers.ModelSerializer):
@@ -194,6 +195,8 @@ class ChatConversationListSerializer(serializers.ModelSerializer):
             "updated_at",
             "message_count",
             "last_message",
+            "is_deleted",
+            "deleted_at",
         ]
 
     def get_message_count(self, obj):
@@ -225,6 +228,8 @@ class ChatConversationDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "messages",
+            "is_deleted", 
+            "deleted_at",
         ]
 
 class CropSuggestionSerializer(serializers.ModelSerializer):
