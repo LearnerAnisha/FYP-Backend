@@ -118,7 +118,7 @@ DATABASES = {
         "NAME": os.getenv("DB_NAME"),
         "USER": os.getenv("DB_USER"),
         "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": 'localhost',  # will be "db"
+        "HOST": 'db',  # will be "localhost"
         "PORT": os.getenv("DB_PORT"),
     }
 }
@@ -231,8 +231,8 @@ DEFAULT_CITY = config('DEFAULT_CITY', default='Kathmandu')
 # Cache timeout in seconds (5 minutes)
 WEATHER_CACHE_TIMEOUT = 300
 
-# gemini api key
-GEMINI_API_KEY = config('GEMINI_API_KEY')
+# # gemini api key
+# GEMINI_API_KEY = config('GEMINI_API_KEY')
 
 # jwt
 SIMPLE_JWT = {
@@ -244,7 +244,8 @@ SIMPLE_JWT = {
 }
 
 # Ollama settings
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+# OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")
 OLLAMA_MODEL = "llama3.2"           
 OLLAMA_VISION_MODEL = "llava" 
 

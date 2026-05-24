@@ -19,9 +19,7 @@ def fetch_weather_and_forecast(lat, lon):
     data = response.json()
     forecast_list = data["list"]
 
-    # -----------------------
     # CURRENT WEATHER
-    # -----------------------
     current = forecast_list[0]
 
     current_weather = {
@@ -32,9 +30,7 @@ def fetch_weather_and_forecast(lat, lon):
         "condition": current["weather"][0]["main"],
     }
 
-    # -----------------------
     # 5-DAY FORECAST (1 per day)
-    # -----------------------
     daily_forecast = OrderedDict()
 
     for item in forecast_list:
@@ -54,6 +50,7 @@ def fetch_weather_and_forecast(lat, lon):
             break
 
     return {
+        "city": data["city"]["name"],
         "current": current_weather,
         "forecast": list(daily_forecast.values())
     }

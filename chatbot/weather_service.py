@@ -1,5 +1,6 @@
 import requests
 from datetime import datetime, timedelta
+from django.utils import timezone
 from django.conf import settings
 from .models import WeatherData
 
@@ -21,7 +22,7 @@ class WeatherService:
         # Check if we have recent cached data (less than 1 hour old)
         cached = WeatherData.objects.filter(
             location=location,
-            fetched_at__gte=datetime.now() - timedelta(hours=1)
+            fetched_at__gte=timezone.now() - timedelta(hours=1)
         ).first()
         
         if cached:
