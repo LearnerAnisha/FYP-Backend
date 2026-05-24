@@ -6,6 +6,7 @@ from .views import (
     PaymentStatusView,
     PaymentListView,
     QuotaStatusView,
+    CancelSubscriptionView,
 )
 
 urlpatterns = [
@@ -14,6 +15,7 @@ urlpatterns = [
     path("success/", PaymentSuccessView.as_view(), name="payment-success"),
     path("failure/", PaymentFailureView.as_view(), name="payment-failure"),
     path("quota/status/", QuotaStatusView.as_view(), name="quota-status"),
+    path("cancel/", CancelSubscriptionView.as_view(), name="cancel-subscription"),
 
     # Utility
     path("<int:payment_id>/status/", PaymentStatusView.as_view(), name="payment-status"),

@@ -32,7 +32,9 @@ from .utils import (
 )
 
 logger = logging.getLogger(__name__)
-
+def fmt(val):
+    from decimal import Decimal
+    return str(Decimal(str(val)).normalize())
 
 # 1. INITIATE PAYMENT
 
@@ -75,7 +77,16 @@ class InitiatePaymentView(APIView):
             )
 
         data = serializer.validated_data
-
+        
+        existing = Payment.objects.filter(
+            user=request.user,
+            status=Payment.Status.PENDING
+        ).first()
+        if existing:
+            existing.status = Payment.Status.FAILED
+            existing.save(update_fields=["status", "updated_at"])
+            logger.info("Cancelled stale pending payment id=%s", existing.pk)
+    
         # Create PENDING payment record
         payment = Payment.objects.create(
             user=request.user if request.user.is_authenticated else None,
@@ -96,21 +107,21 @@ class InitiatePaymentView(APIView):
 
         # Generate HMAC-SHA256 signature
         signature = generate_esewa_signature(
-            total_amount=str(payment.total_amount),
+            total_amount=fmt(payment.total_amount),
             transaction_uuid=str(payment.transaction_uuid),
             product_code=settings.ESEWA_PRODUCT_CODE,
         )
 
         esewa_payload = {
-            "amount": str(payment.amount),
-            "tax_amount": str(payment.tax_amount),
-            "service_charge": str(payment.service_charge),
-            "delivery_charge": str(payment.delivery_charge),
-            "total_amount": str(payment.total_amount),
+            "amount": fmt(payment.amount),
+            "tax_amount": fmt(payment.tax_amount),
+            "service_charge": fmt(payment.service_charge),
+            "delivery_charge": fmt(payment.delivery_charge),
+            "total_amount": fmt(payment.total_amount),
             "transaction_uuid": str(payment.transaction_uuid),
             "product_code": settings.ESEWA_PRODUCT_CODE,
-            "product_service_charge": str(payment.service_charge),
-            "product_delivery_charge": str(payment.delivery_charge),
+            "product_service_charge": fmt(payment.service_charge),
+            "product_delivery_charge": fmt(payment.delivery_charge),
             # DRF handles these URLs — after verifying, DRF redirects to FRONTEND_URL
             "success_url": f"{settings.DOMAIN}/api/payment/success/",
             "failure_url": f"{settings.DOMAIN}/api/payment/failure/",
@@ -310,7 +321,7 @@ class PaymentStatusView(APIView):
     Response:
         { "payment": { id, status, esewa_ref_id, total_amount, ... } }
     """
-    
+    permission_classes = [IsAuthenticated]
     def get(self, request, payment_id):
         try:
             # Scope lookup to the authenticated user — prevents IDOR
@@ -338,7 +349,7 @@ class PaymentListView(APIView):
     Response:
         { "count": 5, "payments": [ ... ] }
     """
-
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         # Filter to only the logged-in user's payments
         payments = Payment.objects.filter(user=request.user).order_by("-created_at")
@@ -381,3 +392,18 @@ class QuotaStatusView(APIView):
             },
         }
         return Response(data)
+
+
+class CancelSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            subscription = Subscription.objects.get(user=request.user)
+            subscription.is_active = False
+            subscription.save(update_fields=["is_active", "updated_at"])
+            return Response(
+                {"message": "Subscription cancelled successfully."}, status=200
+            )
+        except Subscription.DoesNotExist:
+            return Response({"message": "No active subscription found."}, status=404)

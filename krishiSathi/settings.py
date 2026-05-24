@@ -57,6 +57,8 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = "authentication.User"
 
 REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "payment.exceptions.custom_exception_handler",  
+
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
@@ -77,7 +79,7 @@ REST_FRAMEWORK = {
         "anon": "100/day",
         "user": "1000/day",
         "otp_verify": "5/hour",     # ← Max 5 OTP attempts per hour per IP
-        "login": "10/hour",          # ← Max 10 login attempts per hour
+        "login": "100/hour",          # ← Max 10 login attempts per hour
     },  
 }
 
@@ -250,7 +252,7 @@ OLLAMA_MODEL = "llama3.2"
 OLLAMA_VISION_MODEL = "llava" 
 
 # ESEWA CONFIGURATION 
-FRONTEND_URL = "http://localhost:5173"
+FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173")
 
 ESEWA_SECRET_KEY = config("ESEWA_SECRET_KEY")
 ESEWA_PRODUCT_CODE = config("ESEWA_PRODUCT_CODE")
