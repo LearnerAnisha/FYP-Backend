@@ -1,5 +1,6 @@
 from django.db import models
-class MasterProduct(models.Model):
+from admin_panel.models import SoftDeleteModel
+class MasterProduct(SoftDeleteModel):
     """
     Stores each commodity exactly once.
     This table always holds the latest known price snapshot.
@@ -25,7 +26,7 @@ class MasterProduct(models.Model):
 
     def __str__(self):
         return self.commodityname
-class DailyPriceHistory(models.Model):
+class DailyPriceHistory(SoftDeleteModel):
     """
     Stores daily snapshot records for price trend analysis.
     A row exists only if the commodity appeared in that day's API.

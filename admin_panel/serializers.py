@@ -418,7 +418,17 @@ class AdminSubscriptionSerializer(serializers.ModelSerializer):
             "expires_at_display",
             "created_at",
         ]
-        read_only_fields = fields
+        read_only_fields = [
+            "id",
+            "user_id",
+            "user_email",
+            "user_name",
+            "payment_uuid",
+            "payment_amount",
+            "starts_at",
+            "created_at",
+            "expires_at_display",
+        ]
 
     def get_expires_at_display(self, obj):
         if obj.expires_at is None:

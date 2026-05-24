@@ -2,7 +2,7 @@ import uuid
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-
+from admin_panel.models import SoftDeleteModel
 class Payment(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"
@@ -38,7 +38,7 @@ class Payment(models.Model):
         return f"Payment #{self.pk} | {self.transaction_uuid} | {self.status}"
 
 
-class Subscription(models.Model):
+class Subscription(SoftDeleteModel):
     class Plan(models.TextChoices):
         FREE = "FREE", "Free"  # ← removed BASIC/PREMIUM, kept only these two
         PRO = "PRO", "Pro"
