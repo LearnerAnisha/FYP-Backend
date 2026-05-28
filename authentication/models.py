@@ -1,18 +1,3 @@
-"""
-models.py
----------
-This module defines the database models used for authentication.
-
-It contains:
-1. A custom User model that uses email as the primary identifier.
-2. An EmailOTP model for secure email-based OTP verification.
-
-The design follows modern authentication practices where:
-- Email replaces username
-- Users must verify their email before login
-- OTPs are short-lived and single-use
-"""
-
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
@@ -33,6 +18,7 @@ class UserManager(BaseUserManager):
         - email
         - phone
         """
+        # Validate required fields early for clearer errors
         if not email:
             raise ValueError("Email is required")
         if not phone:
@@ -47,7 +33,10 @@ class UserManager(BaseUserManager):
             phone=phone,
             **extra_fields
         )
+        # Hash and set password using Django’s password hasher
         user.set_password(password)
+        
+        # Save using the correct database alias
         user.save(using=self._db)
         return user
 
@@ -55,10 +44,13 @@ class UserManager(BaseUserManager):
         """
         Creates and saves a superuser with administrative privileges.
         """
+        
+        # Ensure required privilege flags are set for superuser
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_verified", True)
-
+        
+        # Delegate to create_user for actual creation logic
         return self.create_user(full_name, email, phone, password, **extra_fields)
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -84,20 +76,26 @@ class User(AbstractBaseUser, PermissionsMixin):
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
 
     USERNAME_FIELD = "email"
+    
+    # Extra fields required when creating superuser via `createsuperuser`
     REQUIRED_FIELDS = ["full_name", "phone"]
-
+    
+    # Attach custom manager
     objects = UserManager()
 
     def __str__(self):
         return self.email
 
 class FarmerProfile(models.Model):
+    
+    # One-to-one link to main User; profile is deleted if user is deleted
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
         related_name="farmer_profile"
     )
-
+    
+    # Additional farmer-specific attributes
     farm_size = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True
     )
@@ -118,7 +116,8 @@ class EmailOTP(models.Model):
     - Automatic expiration (10 minutes)
     - Deleted after successful verification
     """
-
+    
+    # Each user can have at most one active OTP (OneToOne)
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,

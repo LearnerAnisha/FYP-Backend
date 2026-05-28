@@ -1,19 +1,3 @@
-"""
-DRF Views for Kalimati Price Forecasting API (SARIMAX + LightGBM ensemble).
-
-Updated:
-  - _get_dataframe() replaces _latest_csv() + load_csv() everywhere.
-    It queries price_predictor.DailyPriceHistory first (DB-first strategy)
-    and falls back to the most recent uploaded CSV only if the DB is empty
-    or unavailable.
-  - train_commodity() / retrain_all() now receive a pre-loaded DataFrame
-    (df=) so the DB / CSV is not hit a second time inside the pipeline.
-  - MarketAnalysisView._from_db() now reads price_predictor.DailyPriceHistory
-    directly instead of the local PriceRecord model.
-  - _run_forecast(): each forecast step includes a `confidence` field
-    derived from the CI width relative to the predicted price.
-"""
-
 import logging
 from pathlib import Path
 
@@ -191,7 +175,7 @@ def _run_forecast(commodity: str, steps: int, model_type: str) -> dict:
             detail=f"No trained model file found for '{commodity}' with model='{model_type}'.",
         )
 
-    # Build preds / lower / upper 
+    # Build preds / lower / upper
     if model_type == "sarimax":
         if sarimax_result is None:
             raise ModelNotTrainedError(commodity, model="SARIMAX")
@@ -254,16 +238,17 @@ def _run_forecast(commodity: str, steps: int, model_type: str) -> dict:
         ),
     }
 
+
 # Views
 class ForecastView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        
+
         blocked = check_and_increment_quota(request.user, "price_forecast")
         if blocked:
             return blocked
-        
+
         serializer = ForecastRequestSerializer(data=request.query_params)
 
         if not serializer.is_valid():
@@ -525,7 +510,7 @@ class MarketAnalysisView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        # Primary: price_predictor DB 
+        # Primary: price_predictor DB
         try:
             return self._from_price_predictor_db()
         except Exception as e:
@@ -534,7 +519,7 @@ class MarketAnalysisView(APIView):
                 e,
             )
 
-        # Fallback: CSV 
+        # Fallback: CSV
         try:
             return self._from_csv()
         except Exception as e:

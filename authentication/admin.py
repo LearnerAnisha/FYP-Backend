@@ -1,15 +1,3 @@
-"""
-admin.py
----------
-This module registers the custom User model for Django's admin interface.
-It extends Django's built-in UserAdmin to properly support:
-
-- Email-based authentication
-- Additional user attributes (full_name, phone, accepted_terms)
-- Custom permission fields
-- OTP-based verification state
-"""
-
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import User
@@ -63,7 +51,7 @@ class UserAdmin(BaseUserAdmin):
                 "email",
                 "phone",
                 "accepted_terms",
-                "password",           # changed from password1 & password2
+                "password",        
                 "is_verified",
                 "is_staff",
                 "is_superuser"

@@ -1,15 +1,12 @@
-"""
-email.py
----------
-Handles email delivery using Azure Communication Services (ACS).
-"""
-
 from azure.communication.email import EmailClient
 from django.conf import settings
 
 
 def send_otp_email(user, otp_code):
+    # Initialize Azure Email client from a connection string in settings
     client = EmailClient.from_connection_string(settings.AZURE_EMAIL_CONNECTION_STRING)
+
+    # Build email payload including both text and HTML versions
     message = {
         "senderAddress": settings.AZURE_SENDER_EMAIL,
         "recipients": {"to": [{"address": user.email}]},
@@ -30,6 +27,8 @@ def send_password_reset_email(user, reset_link):
     Sends a password-reset link email via Azure Communication Services.
     """
     client = EmailClient.from_connection_string(settings.AZURE_EMAIL_CONNECTION_STRING)
+
+    # Construct password reset email with CTA button in HTML
     message = {
         "senderAddress": settings.AZURE_SENDER_EMAIL,
         "recipients": {"to": [{"address": user.email}]},

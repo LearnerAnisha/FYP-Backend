@@ -65,7 +65,7 @@ def fit_lightgbm(feature_df: pd.DataFrame) -> object:
         raise TrainingFailedError('LightGBM', detail="Target column 'avg_price' contains NaN values.")
 
     try:
-        n_splits = min(3, len(X) // 30)
+        n_splits = min(3, len(X) // 100)
         if n_splits < 2:
             logger.warning("Dataset too small for cross-validation. Training without CV.")
             n_splits = None
@@ -97,7 +97,7 @@ def fit_lightgbm(feature_df: pd.DataFrame) -> object:
                     X_tr, y_tr,
                     eval_set=[(X_val, y_val)],
                     callbacks=[
-                        lgb.early_stopping(50, verbose=False),
+                        lgb.early_stopping(30, verbose=False),
                         lgb.log_evaluation(period=-1),
                     ],
                 )

@@ -62,8 +62,10 @@ class RegisterView(generics.CreateAPIView):
 
         delivery = _deliver_otp(user, otp_code)
         channels = []
-        if delivery["email_sent"]: channels.append("email")
-        if delivery["sms_sent"]: channels.append("phone")
+        if delivery["email_sent"]:
+            channels.append("email")
+        if delivery["sms_sent"]:
+            channels.append("phone")
 
         return Response(
             {
@@ -73,6 +75,7 @@ class RegisterView(generics.CreateAPIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
@@ -255,9 +258,6 @@ class ResetPasswordView(APIView):
         )
 
 
-# ─────────────────────────────────────────────
-#  Existing views (unchanged below)
-# ─────────────────────────────────────────────
 class ProfileView(RetrieveUpdateAPIView):
     serializer_class = ProfileSerializer
     permission_classes = [IsAuthenticated]
@@ -461,8 +461,10 @@ class ResendOTPView(APIView):
 
         delivery = _deliver_otp(user, otp_code)
         channels = []
-        if delivery["email_sent"]: channels.append("email")
-        if delivery["sms_sent"]: channels.append("phone")
+        if delivery["email_sent"]:
+            channels.append("email")
+        if delivery["sms_sent"]:
+            channels.append("phone")
 
         return Response(
             {"message": f"A new OTP has been sent to your {' and '.join(channels)}."},

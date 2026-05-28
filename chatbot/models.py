@@ -3,7 +3,7 @@ from authentication.models import User
 from admin_panel.models import SoftDeleteModel
 
 
-class ChatConversation(SoftDeleteModel):  # ← was models.Model
+class ChatConversation(SoftDeleteModel):  
     """Stores each conversation session"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     session_id = models.CharField(max_length=255, unique=True)

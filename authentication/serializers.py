@@ -1,10 +1,3 @@
-"""
-serializers.py
----------------
-Defines serializers for user registration and login validation
-with strong input validation and clear error messages.
-"""
-
 import re
 from rest_framework import serializers
 from .models import FarmerProfile, User, SavedReport
@@ -16,7 +9,8 @@ class RegisterSerializer(serializers.ModelSerializer):
     """
     Serializer for user registration with strong validation rules.
     """
-
+    
+    # Write-only so password is never returned in API responses
     password = serializers.CharField(write_only=True)
     accepted_terms = serializers.BooleanField(required=True)
 

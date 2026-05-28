@@ -162,8 +162,9 @@ def forecast_sarimax(fitted_model, steps: int = 7) -> dict:
 
 def save_sarimax(model, path: Path):
     try:
-        joblib.dump(model, path)
-        logger.info("SARIMAX model saved to %s", path)
+        sm_path = str(path).replace(".pkl", ".statsmodels")
+        model.save(sm_path)
+        logger.info("SARIMAX model saved to %s", sm_path)
     except Exception as e:
         logger.error("Failed to save SARIMAX model: %s", e)
         raise
@@ -171,7 +172,12 @@ def save_sarimax(model, path: Path):
 
 def load_sarimax(path: Path):
     try:
-        return joblib.load(path)
+        import statsmodels.tsa.statespace.sarimax as sm_sarimax
+
+        sm_path = str(path).replace(".pkl", ".statsmodels")
+        if not Path(sm_path).exists():
+            raise FileNotFoundError(sm_path)
+        return sm_sarimax.SARIMAXResults.load(sm_path)
     except FileNotFoundError:
         raise ModelLoadError("SARIMAX", detail=f"File not found: {path}")
     except Exception as e:
