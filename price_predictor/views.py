@@ -15,6 +15,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from datetime import timedelta
 from django.utils import timezone
 
+
 class FetchMarketPriceAPIView(APIView):
     """
     Fetches latest market prices from Kalimati API and updates:
@@ -29,31 +30,33 @@ class FetchMarketPriceAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        
+
         api_url = "https://kalimatimarket.gov.np/api/daily-prices/en"
-        
+
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0"
+            "User-Agent": "Mozilla/5.0",
         }
         try:
-            response = requests.get(api_url,headers=headers,timeout=15)
+            response = requests.get(api_url, headers=headers, timeout=15)
             response.raise_for_status()
             data = response.json()
-            
+
             if "date" not in data or "prices" not in data:
                 return Response(
-            {
-                "error": "Invalid API response",
-                "received_keys": list(data.keys()),
-                "raw_response": data
-            },
-            status=500
-        )
+                    {
+                        "error": "Invalid API response",
+                        "received_keys": list(data.keys()),
+                        "raw_response": data,
+                    },
+                    status=500,
+                )
         except Exception as e:
-            return Response({"error": f"API fetch failed: {str(e)}"},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": f"API fetch failed: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         api_date = datetime.strptime(data["date"], "%Y-%m-%d").date()
 
@@ -77,8 +80,8 @@ class FetchMarketPriceAPIView(APIView):
                     "min_price": min_p,
                     "max_price": max_p,
                     "avg_price": avg_p,
-                    "last_price": avg_p,   # always updated when new data exists
-                }
+                    "last_price": avg_p,  # always updated when new data exists
+                },
             )
 
             DailyPriceHistory.objects.update_or_create(
@@ -88,10 +91,10 @@ class FetchMarketPriceAPIView(APIView):
                     "min_price": min_p,
                     "max_price": max_p,
                     "avg_price": avg_p,
-                }
+                },
             )
 
-        #For items missing today → set today's fields NULL
+        # For items missing today → set today's fields NULL
         all_products = MasterProduct.objects.all()
 
         for product in all_products:
@@ -103,9 +106,13 @@ class FetchMarketPriceAPIView(APIView):
                 product.save(update_fields=["min_price", "max_price", "avg_price"])
 
         return Response(
-            {"message": "Market prices updated (missing items set to NULL)", "date": str(api_date)},
-            status=status.HTTP_201_CREATED
+            {
+                "message": "Market prices updated (missing items set to NULL)",
+                "date": str(api_date),
+            },
+            status=status.HTTP_201_CREATED,
         )
+
 
 class LatestPricesAPIView(ListAPIView):
     """
@@ -142,6 +149,7 @@ class LatestPricesAPIView(ListAPIView):
 
     ordering = ["commodityname"]  # default
 
+
 class DailyPriceHistoryAPIView(APIView):
     """Returns complete historical data."""
 
@@ -151,6 +159,8 @@ class DailyPriceHistoryAPIView(APIView):
         data = DailyPriceHistory.objects.all()
         serializer = DailyPriceHistorySerializer(data, many=True)
         return Response(serializer.data)
+
+
 class MarketPriceAnalysisAPIView(APIView):
     """
     Compares today's vs yesterday’s average price for all commodities.
@@ -158,7 +168,7 @@ class MarketPriceAnalysisAPIView(APIView):
     """
 
     permission_classes = [AllowAny]
-    
+
     def get(self, request):
         dates = list(
             DailyPriceHistory.objects.values_list("date", flat=True)
@@ -191,36 +201,37 @@ class MarketPriceAnalysisAPIView(APIView):
             else:
                 change_pct = 0
 
-            trend = (
-                "up" if change_pct > 0 else
-                "down" if change_pct < 0 else
-                "same"
+            trend = "up" if change_pct > 0 else "down" if change_pct < 0 else "same"
+
+            if trend == "up":
+                ups += 1
+            if trend == "down":
+                downs += 1
+
+            results.append(
+                {
+                    "commodity": row.product.commodityname,
+                    "today": today_avg,
+                    "yesterday": y_avg,
+                    "change_percentage": round(change_pct, 2),
+                    "trend": trend,
+                }
             )
 
-            if trend == "up": ups += 1
-            if trend == "down": downs += 1
-
-            results.append({
-                "commodity": row.product.commodityname,
-                "today": today_avg,
-                "yesterday": y_avg,
-                "change_percentage": round(change_pct, 2),
-                "trend": trend,
-            })
-
         market_trend = (
-            "Bullish" if ups > downs else
-            "Bearish" if downs > ups else
-            "Neutral"
+            "Bullish" if ups > downs else "Bearish" if downs > ups else "Neutral"
         )
 
-        return Response({
-            "today": str(today),
-            "yesterday": str(yesterday),
-            "market_trend": market_trend,
-            "changes": results
-        })
-        
+        return Response(
+            {
+                "today": str(today),
+                "yesterday": str(yesterday),
+                "market_trend": market_trend,
+                "changes": results,
+            }
+        )
+
+
 class PriceStatsAPIView(APIView):
     """
     Price Predictor dashboard statistics (app-level logic).
@@ -231,21 +242,26 @@ class PriceStatsAPIView(APIView):
 
         total_products = MasterProduct.objects.count()
 
-        updated_today = MasterProduct.objects.filter(
-            dailypricehistory__date=today
-        ).distinct().count()
+        updated_today = (
+            MasterProduct.objects.filter(dailypricehistory__date=today)
+            .distinct()
+            .count()
+        )
 
         missing_today = total_products - updated_today
 
         total_price_records = DailyPriceHistory.objects.count()
 
-        return Response({
-            "total_products": total_products,
-            "updated_today": updated_today,
-            "missing_today": missing_today,
-            "total_price_records": total_price_records,
-        })
-        
+        return Response(
+            {
+                "total_products": total_products,
+                "updated_today": updated_today,
+                "missing_today": missing_today,
+                "total_price_records": total_price_records,
+            }
+        )
+
+
 class LastMonthHistoryView(APIView):
     """
     Returns last 30 days of data for a specific commodity
@@ -258,8 +274,7 @@ class LastMonthHistoryView(APIView):
         start_date = today - timedelta(days=30)
 
         data = DailyPriceHistory.objects.filter(
-            product__commodityname__icontains=commodity,
-            date__gte=start_date
+            product__commodityname__icontains=commodity, date__gte=start_date
         ).order_by("date")
 
         serializer = DailyPriceHistorySerializer(data, many=True)
