@@ -3,6 +3,8 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from admin_panel.models import SoftDeleteModel
+
+
 class Payment(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"
@@ -25,7 +27,9 @@ class Payment(models.Model):
     service_charge = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     delivery_charge = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True
+    )
     esewa_ref_id = models.CharField(max_length=100, blank=True, null=True)
     esewa_raw_response = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -40,7 +44,7 @@ class Payment(models.Model):
 
 class Subscription(SoftDeleteModel):
     class Plan(models.TextChoices):
-        FREE = "FREE", "Free"  # ← removed BASIC/PREMIUM, kept only these two
+        FREE = "FREE", "Free"  
         PRO = "PRO", "Pro"
 
     user = models.OneToOneField(

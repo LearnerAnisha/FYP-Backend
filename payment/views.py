@@ -32,9 +32,13 @@ from .utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
 def fmt(val):
     from decimal import Decimal
+
     return str(Decimal(str(val)).normalize())
+
 
 # 1. INITIATE PAYMENT
 
@@ -49,9 +53,9 @@ class InitiatePaymentView(APIView):
     Request Body:
         {
             "amount": 499,
-            "tax_amount": 0,       (optional, default 0)
-            "service_charge": 0,   (optional, default 0)
-            "delivery_charge": 0   (optional, default 0)
+            "tax_amount": 0, (optional, default 0)
+            "service_charge": 0, (optional, default 0)
+            "delivery_charge": 0, (optional, default 0)
         }
 
     Response 201:
@@ -77,16 +81,15 @@ class InitiatePaymentView(APIView):
             )
 
         data = serializer.validated_data
-        
+
         existing = Payment.objects.filter(
-            user=request.user,
-            status=Payment.Status.PENDING
+            user=request.user, status=Payment.Status.PENDING
         ).first()
         if existing:
             existing.status = Payment.Status.FAILED
             existing.save(update_fields=["status", "updated_at"])
             logger.info("Cancelled stale pending payment id=%s", existing.pk)
-    
+
         # Create PENDING payment record
         payment = Payment.objects.create(
             user=request.user if request.user.is_authenticated else None,
@@ -231,7 +234,7 @@ class PaymentSuccessView(APIView):
             frontend_url = f"{settings.FRONTEND_URL}/payment/callback?status=failed"
             return django_redirect(frontend_url)
 
-        # Step 7: Mark COMPLETE 
+        # Step 7: Mark COMPLETE
         payment.status = Payment.Status.COMPLETE
         payment.esewa_ref_id = verify_response.get("ref_id")
         payment.esewa_raw_response = verify_response
@@ -243,13 +246,14 @@ class PaymentSuccessView(APIView):
             "Payment COMPLETE | id=%s | ref_id=%s", payment.pk, payment.esewa_ref_id
         )
 
-
         # Step 8: Create or update subscription for authenticated user
         if payment.user:
             from datetime import timedelta
             from django.utils import timezone
 
-            expires_at = timezone.now() + timedelta(days=30)  # adjust per your plan logic
+            expires_at = timezone.now() + timedelta(
+                days=30
+            )  # adjust per your plan logic
 
             Subscription.objects.update_or_create(
                 user=payment.user,
@@ -321,7 +325,9 @@ class PaymentStatusView(APIView):
     Response:
         { "payment": { id, status, esewa_ref_id, total_amount, ... } }
     """
+
     permission_classes = [IsAuthenticated]
+
     def get(self, request, payment_id):
         try:
             # Scope lookup to the authenticated user — prevents IDOR
@@ -335,7 +341,7 @@ class PaymentStatusView(APIView):
         return Response(
             {"payment": PaymentSerializer(payment).data},
             status=status.HTTP_200_OK,
-        )    
+        )
 
 
 # 5. PAYMENT LIST
@@ -349,7 +355,9 @@ class PaymentListView(APIView):
     Response:
         { "count": 5, "payments": [ ... ] }
     """
+
     permission_classes = [IsAuthenticated]
+
     def get(self, request):
         # Filter to only the logged-in user's payments
         payments = Payment.objects.filter(user=request.user).order_by("-created_at")

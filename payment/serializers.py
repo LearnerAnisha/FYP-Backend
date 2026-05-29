@@ -5,6 +5,7 @@ from .models import Payment, Subscription
 MAX_AMOUNT = Decimal("500000.00")
 MIN_AMOUNT = Decimal("1.00")
 
+
 class PaymentInitSerializer(serializers.Serializer):
     """
     Validates incoming payment initiation request from client.
