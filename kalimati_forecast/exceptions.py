@@ -1,16 +1,3 @@
-"""
-Centralised error handling for the Kalimati Forecasting API.
-
-Every error returned by the API has the same shape:
-{
-    "error": {
-        "code":    "MODEL_NOT_TRAINED",
-        "message": "Human-readable explanation",
-        "detail":  "Optional technical detail"
-    }
-}
-"""
-
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework import status
@@ -18,7 +5,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Error codes 
+# Error codes
+
 
 class ErrorCode:
     # Data errors
@@ -43,7 +31,7 @@ class ErrorCode:
     INTERNAL_ERROR = "INTERNAL_ERROR"
 
 
-# Custom exception classes 
+# Custom exception classes
 
 
 class ForecastAPIError(Exception):
@@ -172,7 +160,7 @@ class ForecastFailedError(ForecastAPIError):
         )
 
 
-# DRF global exception handler 
+# DRF global exception handler
 
 
 def custom_exception_handler(exc, context):

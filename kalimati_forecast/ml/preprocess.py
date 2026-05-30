@@ -1,12 +1,3 @@
-"""
-Preprocessing pipeline for Kalimati market price data.
-Every public function raises a typed ForecastAPIError on failure —
-callers never see raw exceptions from pandas or numpy.
-
-Updated: load_from_db() added — reads directly from
-price_predictor.DailyPriceHistory instead of a CSV file.
-"""
-
 import logging
 import numpy as np
 import pandas as pd
@@ -74,6 +65,7 @@ _COL_ALIASES = {
 REQUIRED_COLUMNS = ["commodity", "avg_price"]
 
 # Data loading
+
 
 def load_from_db() -> pd.DataFrame:
     """
@@ -268,7 +260,9 @@ def load_csv(filepath: str) -> pd.DataFrame:
     )
     return df
 
+
 # Series preparation
+
 
 def prepare_series(df: pd.DataFrame, commodity: str) -> pd.Series:
     """
@@ -315,7 +309,9 @@ def prepare_series(df: pd.DataFrame, commodity: str) -> pd.Series:
 
     return sub["avg_price"].rename("avg_price")
 
+
 # Feature engineering
+
 
 def build_features(series: pd.Series) -> pd.DataFrame:
     """
@@ -419,6 +415,7 @@ def evaluate_metrics(y_true, y_pred) -> dict:
         "rmse": round(rmse, 4),
         "mape": round(mape, 4) if mape is not None else None,
     }
+
 
 # Internal alias so load_from_db() can use F() without a top-level ORM import
 def _F(field):

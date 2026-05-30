@@ -1,20 +1,3 @@
-"""
-Training pipeline: SARIMAX + LightGBM ensemble for Kalimati price forecasting.
-
-Updated: train_commodity() and retrain_all() now accept an optional `df`
-parameter (pre-loaded DataFrame).  When `df` is supplied the CSV path is
-ignored entirely, so views can pass the DB-sourced DataFrame directly.
-
-Priority order for data loading:
-    1. df   — pre-loaded DataFrame passed by the caller (highest priority)
-    2. csv_path — explicit CSV path (CLI / legacy use)
-    3. load_from_db() — live DB query (default when nothing else is given)
-
-Usage (CLI):
-    python forecast/ml/train_pipeline.py data/kalimati.csv Tomato
-    python forecast/ml/train_pipeline.py data/kalimati.csv          # trains all
-"""
-
 import logging
 import sys
 import os
@@ -36,8 +19,8 @@ def _model_paths(commodity: str, models_dir: Path) -> dict:
 def train_commodity(
     commodity: str,
     models_dir: Path,
-    csv_path: str = None, 
-    df=None, 
+    csv_path: str = None,
+    df=None,
     test_days: int = 60,
 ) -> dict:
     """
@@ -90,14 +73,14 @@ def train_commodity(
             logger.info("No CSV path supplied — loading from price_predictor DB.")
             df = load_from_db()
 
-    # 2. Prepare series 
+    # 2. Prepare series
     series = prepare_series(df, commodity)
 
     print(
         f"  Data: {series.index[0].date()} → {series.index[-1].date()} ({len(series)} days)"
     )
 
-    # 3. Train / test split 
+    # 3. Train / test split
     train_series, test_series = train_test_split_ts(series, test_days=test_days)
     print(f"  Split: {len(train_series)} train / {len(test_series)} test days")
 
@@ -107,7 +90,7 @@ def train_commodity(
     sarimax_model = None
     lgbm_model = None
 
-    # 4. Fit SARIMAX 
+    # 4. Fit SARIMAX
     print("\n  [1/2] Fitting SARIMAX ...")
     try:
         sarimax_model = fit_sarimax(train_series)
@@ -127,7 +110,7 @@ def train_commodity(
         metrics["sarimax"] = {"error": str(e)}
         sarimax_preds = None
 
-    # 5. Fit LightGBM 
+    # 5. Fit LightGBM
     print("  [2/2] Fitting LightGBM ...")
     try:
         feature_df = build_features(train_series)
@@ -148,7 +131,7 @@ def train_commodity(
         metrics["lgbm"] = {"error": str(e)}
         lgbm_preds = None
 
-    # 6. Both models failed 
+    # 6. Both models failed
     if sarimax_preds is None and lgbm_preds is None:
         raise TrainingFailedError(
             "ensemble",
@@ -158,7 +141,7 @@ def train_commodity(
             ),
         )
 
-    # 7. Ensemble weights 
+    # 7. Ensemble weights
     if sarimax_preds is not None and lgbm_preds is not None:
         weights = optimize_weights(sarimax_preds, lgbm_preds, test_series.values)
 
@@ -199,8 +182,8 @@ def train_commodity(
 
 def retrain_all(
     models_dir: Path,
-    csv_path: str = None,  
-    df=None,  
+    csv_path: str = None,
+    df=None,
     commodities: list = None,
 ) -> dict:
     """
@@ -248,6 +231,7 @@ def retrain_all(
     print(f"  Retrain complete: {success}/{len(results)} succeeded.")
     print(f"{'='*60}")
     return results
+
 
 # CLI entry point
 if __name__ == "__main__":

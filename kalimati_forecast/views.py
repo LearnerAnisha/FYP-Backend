@@ -30,9 +30,7 @@ MODELS_DIR = Path(settings.MODELS_DIR)
 DATA_DIR = Path(settings.DATA_DIR)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Internal helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _slug(commodity: str) -> str:
@@ -79,7 +77,7 @@ def _get_dataframe():
     """
     from .ml.preprocess import load_from_db, load_csv
 
-    # ── Primary: DB ───────────────────────────────────────────────────────
+    # Primary: DB 
     try:
         df = load_from_db()
         logger.info("_get_dataframe: loaded %d rows from DB.", len(df))
@@ -89,7 +87,7 @@ def _get_dataframe():
             "_get_dataframe: DB load failed (%s) — falling back to CSV.", db_err
         )
 
-    # ── Fallback: CSV ─────────────────────────────────────────────────────
+    # Fallback: CSV 
     csv_files = sorted(DATA_DIR.glob("*.csv"))
     if not csv_files:
         raise NoDataError(

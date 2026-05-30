@@ -1,8 +1,3 @@
-"""
-SARIMAX model — weekly seasonality + Nepal festival exogenous variables.
-All errors are raised as typed ForecastAPIError subclasses.
-"""
-
 import logging
 import warnings
 import numpy as np
